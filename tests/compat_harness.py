@@ -49,7 +49,7 @@ class CliImplementation:
     cwd: Path
     env: dict[str, str] | None = None
 
-    def run(self, config: Path, args: tuple[str, ...]) -> CliResult:
+    def run(self, config: Path, args: tuple[str, ...], stdin: str | None = None) -> CliResult:
         """Run a command with a Ruby-compatible explicit config flag."""
         completed = subprocess.run(
             [*self.command_prefix, "--config", str(config), *args],
@@ -58,6 +58,7 @@ class CliImplementation:
             text=True,
             capture_output=True,
             check=False,
+            input=stdin,
         )
         return CliResult(completed.returncode, completed.stdout, completed.stderr)
 
@@ -74,14 +75,18 @@ class CompatibilityRun:
     ruby_config: Path
     python_config: Path
 
-    def compare(self, args: tuple[str, ...]) -> tuple[CliResult, CliResult]:
+    def compare(
+        self, args: tuple[str, ...], stdin: str | None = None
+    ) -> tuple[CliResult, CliResult]:
         """Run a command on both implementations and return normalized results."""
         ruby_args = materialize_args(args, self.ruby_root)
         python_args = materialize_args(args, self.python_root)
-        ruby_result = self.ruby.run(self.ruby_config, ruby_args).normalized(self.ruby_root)
-        python_result = self.python.run(self.python_config, python_args).normalized(
-            self.python_root
+        ruby_result = self.ruby.run(self.ruby_config, ruby_args, stdin=stdin).normalized(
+            self.ruby_root
         )
+        python_result = self.python.run(
+            self.python_config, python_args, stdin=stdin
+        ).normalized(self.python_root)
         return ruby_result, python_result
 
     def for_manifest_case(self, case: dict[str, object]) -> CompatibilityRun:
