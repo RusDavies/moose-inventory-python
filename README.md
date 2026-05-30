@@ -1,3 +1,30 @@
 # Moose Inventory Python
 
-Project workspace for the Discord channel `#moose-inventory-python`.
+Python CLI/package replacement for the Ruby `moose-inventory` command.
+
+## Development commands
+
+Install development dependencies first:
+
+```bash
+python -m pip install -e '.[dev]'
+```
+
+Common checks are available through either `make` targets or `scripts/dev.sh`:
+
+```bash
+make test       # python -m pytest
+make coverage   # pytest with coverage report
+make lint       # ruff check src tests
+make format     # ruff format plus import-order fixes
+make typecheck  # mypy
+make build      # build sdist/wheel
+make package    # twine check dist/*
+make check      # full release-readiness gate
+```
+
+The CI/release gate used during development is:
+
+```bash
+./scripts/check.sh
+```
