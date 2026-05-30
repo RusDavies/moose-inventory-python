@@ -4,7 +4,6 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 
 ## Open
 
-- [ ] Record project tailoring decision: Class 4 + Software CLI Package / Command Package, with Ruby `projects/moose-inventory` as the reference implementation.
 - [ ] Write Ruby parity baseline documentation covering CLI command matrix, global flags, config discovery, DB schema/version, output formats, snapshot shapes, dry-run plan events, and Ansible compatibility.
 - [ ] Set up Python CLI package skeleton with `pyproject.toml`, `moose_inventory` package, and `moose-inventory` console entry point.
 - [ ] Add development and verification commands for tests, lint, formatting, type checking, coverage, package build, and package metadata validation.
@@ -31,4 +30,4 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 
 ## Done
 
-_No completed items yet._
+- [x] Record project tailoring decision: Class 4 + Software CLI Package / Command Package, with Ruby `projects/moose-inventory` as the reference implementation. See `docs/process/tailoring-decision.md`.
