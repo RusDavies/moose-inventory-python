@@ -20,3 +20,4 @@ venv/
 # Local/runtime files
 tmp/
 *.db
+/.openclaw-security-audit/
