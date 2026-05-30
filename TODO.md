@@ -7,7 +7,6 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 - [ ] Add development and verification commands for tests, lint, formatting, type checking, coverage, package build, and package metadata validation.
 - [ ] Build Ruby-vs-Python CLI compatibility harness using disposable SQLite databases and golden/structural output comparisons.
 - [ ] Extract command-level golden cases from Ruby specs into a Python parity-test manifest.
-- [ ] Port database lifecycle commands: `db status`, `db doctor`, `db migrate`, `db backup FILE`, and `database` alias.
 - [ ] Port core host commands: `host add`, `host list`, `host get`, and `host rm` with compatibility tests.
 - [ ] Port core group commands: `group add`, `group list`, `group get`, and `group rm` with compatibility tests.
 - [ ] Port host/group association commands: `host addgroup`, `host rmgroup`, `group addhost`, and `group rmhost`, including automatic `ungrouped` behavior.
@@ -27,6 +26,7 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 
 ## Done
 
+- [x] Port database lifecycle commands: `db status`, `db doctor`, `db migrate`, `db backup FILE`, and `database` alias.
 - [x] Implement database schema and migration layer preserving Ruby schema version 4, table names, columns, indexes, and future-schema refusal.
 - [x] Implement config discovery and runtime option parsing compatible with the Ruby CLI (`--config`, `--env`, `--format`, `--ansible`, `--trace`, `--list`, `--host`).
 - [x] Set up Python CLI package skeleton with `pyproject.toml`, `moose_inventory` package, and `moose-inventory` console entry point.
