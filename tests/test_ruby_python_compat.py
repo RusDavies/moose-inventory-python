@@ -33,6 +33,8 @@ def test_database_lifecycle_output_matches_ruby(tmp_path: Path, args: tuple[str,
     [
         ("host", "add", "web01"),
         ("host", "add", "dry-run-host", "--dry-run"),
+        ("host", "add", "plan-host", "--dry-run", "--plan-format", "json"),
+        ("host", "add", "plan-host-without-dry-run", "--plan-format", "json"),
         ("host", "get", "missing"),
         ("host", "list"),
     ],
