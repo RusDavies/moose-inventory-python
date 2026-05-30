@@ -341,7 +341,7 @@ cases:
       json_contains_keys: [_meta, web]
 
   - id: group-addchild-basic
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/group_addchild_spec.rb:122
     description: associates parent group with existing child group
     args: [group, addchild, parent, child]
@@ -373,7 +373,7 @@ cases:
         - "circular"
 
   - id: group-rmchild-delete-orphans-dry-run
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/group_rmchild_spec.rb:176
     description: rmchild --delete-orphans --dry-run reports recursive cleanup without deleting
     args: [group, rmchild, parent, child, --delete-orphans, --dry-run]

@@ -67,6 +67,10 @@ class GroupCommands:
                 return self.addhost(args[1:])
             if action == "rmhost":
                 return self.rmhost(args[1:])
+            if action == "addchild":
+                return self.addchild(args[1:])
+            if action == "rmchild":
+                return self.rmchild(args[1:])
             if action == "addvar":
                 return self.addvar(args[1:])
             if action == "rmvar":
@@ -199,6 +203,161 @@ class GroupCommands:
 
         if options.dry_run:
             print("Dry run complete. No changes applied.")
+        print("Succeeded, with warnings." if warnings else "Succeeded.")
+        return 0
+
+    def addchild(self, raw_args: Sequence[str]) -> int:
+        """Associate a parent group with one or more child groups."""
+        options = parse_group_relation_options(raw_args, destructive=False)
+        if len(options.names) < 2:
+            print(
+                f"ERROR: Wrong number of arguments, {len(options.names)} for 2 or more.",
+                file=sys.stderr,
+            )
+            return 1
+        parent_name = options.names[0].lower()
+        child_names = tuple(name.lower() for name in options.names[1:])
+        if AUTOMATIC_GROUP in (parent_name, *child_names):
+            print(
+                "ERROR: Cannot manually manipulate the automatic group 'ungrouped'.",
+                file=sys.stderr,
+            )
+            return 1
+
+        warnings = False
+        with self.database.engine.begin() as connection:
+            print(
+                f"Associate parent group '{parent_name}' with child group(s) "
+                f"'{','.join(child_names)}':"
+            )
+            print(f"  - retrieve group '{parent_name}'...")
+            parent_id = find_group_id(connection, parent_name)
+            if parent_id is None:
+                print(f"ERROR: The group '{parent_name}' does not exist.", file=sys.stderr)
+                print(
+                    "An error occurred during a transaction, any changes have been rolled back.",
+                    file=sys.stderr,
+                )
+                return 1
+            print("    - OK")
+            for child_name in child_names:
+                print(
+                    f"  - add association {{group:{parent_name} <-> group:{child_name}}}..."
+                )
+                child_id = find_group_id(connection, child_name)
+                if child_id is not None and group_child_exists(connection, parent_id, child_id):
+                    warnings = True
+                    print(
+                        f"WARNING: Association {{group:{parent_name} <-> group:{child_name}}} "
+                        "already exists, skipping.",
+                        file=sys.stderr,
+                    )
+                    print("    - already exists, skipping.")
+                    print("    - OK")
+                    continue
+                if child_id is not None and would_create_group_cycle(
+                    connection, parent_id, child_id
+                ):
+                    print(
+                        "An error occurred during a transaction, any changes have been "
+                        "rolled back.",
+                        file=sys.stderr,
+                    )
+                    print(
+                        f"ERROR: circular group relationship rejected: {parent_name} -> "
+                        f"{child_name}.",
+                        file=sys.stderr,
+                    )
+                    return 1
+                if child_id is None:
+                    warnings = True
+                    print(
+                        f"WARNING: Group '{child_name}' does not exist and will be created.",
+                        file=sys.stderr,
+                    )
+                    print("    - child group does not exist, creating now...")
+                    if not options.dry_run:
+                        child_id = create_group(connection, child_name)
+                    print("      - OK")
+                if not options.dry_run and child_id is not None:
+                    ensure_group_child(connection, parent_id, child_id)
+                print("    - OK")
+            if options.dry_run:
+                print("Dry run complete. No changes applied.")
+            print("  - all OK")
+        print("Succeeded, with warnings." if warnings else "Succeeded.")
+        return 0
+
+    def rmchild(self, raw_args: Sequence[str]) -> int:
+        """Dissociate a parent group from one or more child groups."""
+        options = parse_group_relation_options(raw_args, destructive=True)
+        if len(options.names) < 2:
+            print(
+                f"ERROR: Wrong number of arguments, {len(options.names)} for 2 or more.",
+                file=sys.stderr,
+            )
+            return 1
+        parent_name = options.names[0].lower()
+        child_names = tuple(name.lower() for name in options.names[1:])
+        if AUTOMATIC_GROUP in (parent_name, *child_names):
+            print(
+                "ERROR: Cannot manually manipulate the automatic group 'ungrouped'.",
+                file=sys.stderr,
+            )
+            return 1
+        if not options.yes and not options.dry_run:
+            print(
+                f"ERROR: group rmchild {parent_name} {','.join(child_names)} is destructive. "
+                "Re-run with --yes to confirm, or use --dry-run to preview.",
+                file=sys.stderr,
+            )
+            return 1
+
+        warnings = False
+        with self.database.engine.begin() as connection:
+            print(
+                f"Dissociate parent group '{parent_name}' from child group(s) "
+                f"'{','.join(child_names)}':"
+            )
+            print(f"  - retrieve group '{parent_name}'...")
+            parent_id = find_group_id(connection, parent_name)
+            if parent_id is None:
+                print(f"ERROR: The group '{parent_name}' does not exist.", file=sys.stderr)
+                print(
+                    "An error occurred during a transaction, any changes have been rolled back.",
+                    file=sys.stderr,
+                )
+                return 1
+            print("    - OK")
+            for child_name in child_names:
+                print(
+                    f"  - remove association {{group:{parent_name} <-> group:{child_name}}}..."
+                )
+                child_id = find_group_id(connection, child_name)
+                if child_id is None or not group_child_exists(connection, parent_id, child_id):
+                    warnings = True
+                    print(
+                        f"WARNING: Association {{group:{parent_name} <-> group:{child_name}}} "
+                        "does not exist, skipping.",
+                        file=sys.stderr,
+                    )
+                    print("    - doesn't exist, skipping.")
+                    print("    - OK")
+                    continue
+                if not options.dry_run:
+                    remove_group_child(connection, parent_id, child_id)
+                print("    - OK")
+                if options.recursive:
+                    delete_orphaned_group(
+                        connection,
+                        child_id,
+                        child_name,
+                        dry_run=options.dry_run,
+                        ignored_parent_id=parent_id,
+                    )
+            if options.dry_run:
+                print("Dry run complete. No changes applied.")
+            print("  - all OK")
         print("Succeeded, with warnings." if warnings else "Succeeded.")
         return 0
 
@@ -542,6 +701,7 @@ def parse_group_relation_options(
     names: list[str] = []
     dry_run = False
     yes = False
+    recursive = False
     index = 0
     while index < len(raw_args):
         arg = raw_args[index]
@@ -549,6 +709,8 @@ def parse_group_relation_options(
             dry_run = True
         elif destructive and arg == "--yes":
             yes = True
+        elif destructive and arg == "--delete-orphans":
+            recursive = True
         elif arg == "--plan-format":
             if not dry_run:
                 raise HostCommandError("--plan-format requires --dry-run.")
@@ -556,7 +718,7 @@ def parse_group_relation_options(
         else:
             names.append(arg)
         index += 1
-    return GroupCommandOptions(tuple(names), dry_run=dry_run, yes=yes)
+    return GroupCommandOptions(tuple(names), dry_run=dry_run, yes=yes, recursive=recursive)
 
 
 def create_group(connection: Connection, name: str) -> int:
@@ -586,6 +748,116 @@ def delete_group(connection: Connection, group_id: int) -> None:
             ensure_host_group(connection, int(host_id), automatic_id)
 
 
+def group_child_exists(connection: Connection, parent_id: int, child_id: int) -> bool:
+    """Return whether a parent/child group association exists."""
+    return (
+        connection.execute(
+            select(groups_groups.c.id).where(
+                groups_groups.c.parent_id == parent_id,
+                groups_groups.c.child_id == child_id,
+            )
+        ).scalar_one_or_none()
+        is not None
+    )
+
+
+def ensure_group_child(connection: Connection, parent_id: int, child_id: int) -> None:
+    """Create a parent/child group association if missing."""
+    if not group_child_exists(connection, parent_id, child_id):
+        connection.execute(groups_groups.insert().values(parent_id=parent_id, child_id=child_id))
+
+
+def remove_group_child(connection: Connection, parent_id: int, child_id: int) -> None:
+    """Remove a parent/child group association."""
+    connection.execute(
+        delete(groups_groups).where(
+            groups_groups.c.parent_id == parent_id,
+            groups_groups.c.child_id == child_id,
+        )
+    )
+
+
+def would_create_group_cycle(connection: Connection, parent_id: int, child_id: int) -> bool:
+    """Return whether adding parent -> child would create a cycle."""
+    if parent_id == child_id:
+        return True
+    stack = [child_id]
+    seen: set[int] = set()
+    while stack:
+        current = stack.pop()
+        if current == parent_id:
+            return True
+        if current in seen:
+            continue
+        seen.add(current)
+        children = connection.execute(
+            select(groups_groups.c.child_id).where(groups_groups.c.parent_id == current)
+        ).scalars()
+        stack.extend(int(child) for child in children)
+    return False
+
+
+def delete_orphaned_group(
+    connection: Connection,
+    group_id: int,
+    group_name: str,
+    *,
+    dry_run: bool,
+    ignored_parent_id: int | None = None,
+) -> None:
+    """Recursively delete orphaned child groups after planned dissociation."""
+    if group_name == AUTOMATIC_GROUP:
+        return
+    remaining_parent = connection.execute(
+        select(groups_groups.c.parent_id).where(groups_groups.c.child_id == group_id)
+    ).scalars().all()
+    if any(parent_id != ignored_parent_id for parent_id in remaining_parent):
+        return
+
+    print(f"  - Recursively delete orphaned group '{group_name}'...")
+    child_rows = connection.execute(
+        select(groups_groups.c.child_id, groups.c.name)
+        .select_from(groups_groups.join(groups, groups_groups.c.child_id == groups.c.id))
+        .where(groups_groups.c.parent_id == group_id)
+        .order_by(groups.c.name)
+    ).all()
+    for child in child_rows:
+        print(f"    - Remove association {{group:{group_name} <-> group:{child.name}}}...")
+        if not dry_run:
+            remove_group_child(connection, group_id, int(child.child_id))
+        print("      - OK")
+        delete_orphaned_group(
+            connection,
+            int(child.child_id),
+            str(child.name),
+            dry_run=dry_run,
+            ignored_parent_id=group_id,
+        )
+
+    host_ids = connection.execute(
+        select(groups_hosts.c.host_id).where(groups_hosts.c.group_id == group_id)
+    ).scalars().all()
+    automatic_id = find_group_id(connection, AUTOMATIC_GROUP)
+    if automatic_id is None and not dry_run:
+        automatic_id = create_group(connection, AUTOMATIC_GROUP)
+    for host_id in host_ids:
+        group_count = connection.execute(
+            select(groups_hosts.c.id).where(groups_hosts.c.host_id == host_id)
+        ).all()
+        if len(group_count) == 1:
+            host_name = connection.execute(
+                select(hosts.c.name).where(hosts.c.id == host_id)
+            ).scalar_one()
+            print(f"    - Adding automatic association {{group:ungrouped <-> host:{host_name}}}...")
+            if not dry_run and automatic_id is not None:
+                ensure_host_group(connection, int(host_id), automatic_id)
+            print("      - OK")
+    print(f"    - Destroy group '{group_name}'...")
+    if not dry_run:
+        delete_group(connection, group_id)
+    print("      - OK")
+
+
 def query_groups(
     connection: Connection, *, names: tuple[str, ...] = ()
 ) -> dict[str, dict[str, Any]]:
@@ -605,6 +877,12 @@ def query_groups(
 
 def group_payload(connection: Connection, group_id: int) -> dict[str, Any]:
     """Build group payload."""
+    child_names = connection.execute(
+        select(groups.c.name)
+        .select_from(groups_groups.join(groups, groups_groups.c.child_id == groups.c.id))
+        .where(groups_groups.c.parent_id == group_id)
+        .order_by(groups.c.name)
+    ).scalars().all()
     host_names = connection.execute(
         select(hosts.c.name)
         .select_from(groups_hosts.join(hosts, groups_hosts.c.host_id == hosts.c.id))
@@ -617,6 +895,8 @@ def group_payload(connection: Connection, group_id: int) -> dict[str, Any]:
         .order_by(groupvars.c.name)
     ).all()
     payload: dict[str, Any] = {}
+    if child_names:
+        payload["children"] = list(child_names)
     if host_names:
         payload["hosts"] = list(host_names)
     if variables:
