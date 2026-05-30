@@ -4,10 +4,11 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 
 ## Open
 
-- [ ] Run full parity/release gate and record evidence before any public package release.
+_None._
 
 ## Done
 
+- [x] Run full parity/release gate and record evidence before any public package release.
 - [x] Port dry-run and machine-readable plan output for all mutating command families, including `--plan-format` validation.
 
 - [x] Add package/release documentation for PyPI publication, release ownership, artifact integrity/provenance, and vulnerability intake/security patch process.
