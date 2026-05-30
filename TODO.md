@@ -4,10 +4,12 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 
 ## Open
 
-_None._
+- [ ] Choose the first public Python package version and update package metadata before release.
+- [ ] Add stronger OSV/lockfile release evidence if public release policy requires lockfile-based scanning.
 
 ## Done
 
+- [x] Add GitHub Actions CI gates for the release-readiness check, `pip-audit`, and `gitleaks`.
 - [x] Run full parity/release gate and record evidence before any public package release.
 - [x] Port dry-run and machine-readable plan output for all mutating command families, including `--plan-format` validation.
 
