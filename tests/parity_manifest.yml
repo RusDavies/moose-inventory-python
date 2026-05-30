@@ -355,10 +355,10 @@ cases:
         - "Succeeded"
       stderr: ""
 
-  - id: group-addchild-circular-rejected
-    status: pending_python_port
-    source: spec/lib/moose_inventory/operations/group_child_relations_spec.rb
-    description: circular child-group relationships are rejected
+  - id: group-addchild-circular-ruby-compatible
+    status: active
+    source: spec/lib/moose_inventory/cli/group_addchild_spec.rb
+    description: current Ruby CLI permits circular child-group relationships; Python follows for CLI interchangeability
     args: [group, addchild, child, parent]
     setup:
       - [group, add, parent]
@@ -367,10 +367,9 @@ cases:
     compare:
       mode: exact
     expected:
-      returncode: nonzero
-      stderr_contains:
-        - "ERROR:"
-        - "circular"
+      stdout_contains:
+        - "Succeeded."
+      stderr: ""
 
   - id: group-rmchild-delete-orphans-dry-run
     status: active

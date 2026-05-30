@@ -273,20 +273,6 @@ class GroupCommands:
                     print("    - already exists, skipping.")
                     print("    - OK")
                     continue
-                if child_id is not None and would_create_group_cycle(
-                    connection, parent_id, child_id
-                ):
-                    print(
-                        "An error occurred during a transaction, any changes have been "
-                        "rolled back.",
-                        file=sys.stderr,
-                    )
-                    print(
-                        f"ERROR: circular group relationship rejected: {parent_name} -> "
-                        f"{child_name}.",
-                        file=sys.stderr,
-                    )
-                    return 1
                 if child_id is None:
                     warnings = True
                     print(
