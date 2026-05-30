@@ -100,7 +100,7 @@ cases:
       stderr: ""
 
   - id: host-add-missing-args
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/host_add_spec.rb:26
     description: host add without arguments aborts with Thor arity error
     args: [host, add]
@@ -184,7 +184,7 @@ cases:
       stderr: ""
 
   - id: host-list-filtered
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/host_list_spec.rb:57
     description: host list filters by group, tag, and variable
     args: [host, list, --group, web, --tag, prod, --var, os=fedora]
@@ -217,7 +217,7 @@ cases:
       yaml: {}
 
   - id: host-addvar-malformed
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/host_addvar_spec.rb:58
     description: host addvar rejects malformed key/value pairs
     args: [host, addvar, web01, malformed]
@@ -263,7 +263,7 @@ cases:
         - host_groups: {host: web01, groups: [ungrouped]}
 
   - id: group-add-missing-args
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/group_add_spec.rb:31
     description: group add without arguments aborts with Thor arity error
     args: [group, add]

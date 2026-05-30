@@ -73,6 +73,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(USAGE, end="")
         return 0
 
+    if runtime.argv[0] == "version":
+        print(f"Version {__version__}")
+        return 0
+
     try:
         database_from_runtime(runtime).migrate()
     except (ConfigError, DatabaseError) as exc:
