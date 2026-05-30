@@ -52,9 +52,13 @@ Never commit PyPI tokens, `.pypirc`, generated credentials, database passwords, 
 
 ## Versioning
 
-The initial package version is `0.0.0` while compatibility work is still pre-release. Before first public release:
+Python package versions track the Ruby compatibility line for major/minor versions, while Python patch releases are independent. For example, Python `2.1.x` means the Python CLI targets the Ruby `2.1` behavior contract; Python-only fixes can ship as `2.1.1`, `2.1.2`, and so on. When the Ruby reference advances to `2.2`, the Python package should move to `2.2.0` once parity with that line is verified.
 
-1. Choose the release version in `pyproject.toml`.
+The first public Python release version is `2.1.0`, matching the Ruby `2.1` compatibility target.
+
+Before first public release:
+
+1. Confirm `pyproject.toml` and `src/moose_inventory/version.py` carry the intended release version.
 2. Update docs/examples if the package name or extras change.
 3. Run the full gate.
 4. Tag the release after the final verification commit.
