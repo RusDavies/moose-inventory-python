@@ -179,6 +179,12 @@ def test_tag_command_flows_match_ruby(tmp_path: Path, flow: list[tuple[str, ...]
         assert python_result == ruby_result
 
 
+def test_inventory_doctor_output_matches_ruby(tmp_path: Path) -> None:
+    run = make_compatibility_run(tmp_path)
+    ruby_result, python_result = run.compare(("doctor",))
+    assert python_result == ruby_result
+
+
 def test_snapshot_import_export_flow_matches_ruby(tmp_path: Path) -> None:
     snapshot = tmp_path / "snapshot.yml"
     snapshot.write_text(
