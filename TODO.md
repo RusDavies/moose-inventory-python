@@ -5,7 +5,6 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 ## Open
 
 - [ ] Port dry-run and machine-readable plan output for all mutating command families, including `--plan-format` validation.
-- [ ] Port snapshot export/import/preview behavior, preserving additive import semantics and snapshot version/shape.
 - [ ] Port inventory `doctor` checks and formatted report output.
 - [ ] Port append-only audit recording and `audit list` output.
 - [ ] Port Ansible dynamic inventory behavior for `--list`, `--host HOSTNAME`, and `--ansible` mode.
@@ -17,6 +16,7 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 
 ## Done
 
+- [x] Port snapshot export/import/preview behavior, preserving additive import semantics and snapshot version/shape.
 - [x] Reconcile Ruby/Python child-group cycle behavior: Python now permits cycles to match the current Ruby CLI, with the compatibility decision documented.
 - [x] Add development and verification commands for tests, lint, formatting, type checking, coverage, package build, and package metadata validation.
 - [x] Port metadata tag commands: `addtag`, `rmtag`, and `listtags`, preserving lowercase/strip/dedupe normalization.

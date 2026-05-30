@@ -114,9 +114,7 @@ def test_core_group_stateful_flow_matches_ruby(tmp_path: Path) -> None:
         ],
     ],
 )
-def test_association_command_flows_match_ruby(
-    tmp_path: Path, flow: list[tuple[str, ...]]
-) -> None:
+def test_association_command_flows_match_ruby(tmp_path: Path, flow: list[tuple[str, ...]]) -> None:
     run = make_compatibility_run(tmp_path)
     for args in flow:
         ruby_result, python_result = run.compare(args)
@@ -150,9 +148,7 @@ def test_association_command_flows_match_ruby(
         ],
     ],
 )
-def test_variable_command_flows_match_ruby(
-    tmp_path: Path, flow: list[tuple[str, ...]]
-) -> None:
+def test_variable_command_flows_match_ruby(tmp_path: Path, flow: list[tuple[str, ...]]) -> None:
     run = make_compatibility_run(tmp_path)
     for args in flow:
         ruby_result, python_result = run.compare(args)
@@ -183,6 +179,30 @@ def test_tag_command_flows_match_ruby(tmp_path: Path, flow: list[tuple[str, ...]
         assert python_result == ruby_result
 
 
+def test_snapshot_import_export_flow_matches_ruby(tmp_path: Path) -> None:
+    snapshot = tmp_path / "snapshot.yml"
+    snapshot.write_text(
+        "version: 1\n"
+        "hosts:\n"
+        "  web01:\n"
+        "    groups: [web]\n"
+        "    tags: [Prod]\n"
+        "    vars:\n"
+        "      os: fedora\n"
+        "groups:\n"
+        "  web:\n"
+        "    children: []\n"
+        "    tags: [frontend]\n"
+        "    vars:\n"
+        "      role: frontend\n",
+        encoding="utf-8",
+    )
+    run = make_compatibility_run(tmp_path)
+    for args in [("import", str(snapshot), "--preview"), ("import", str(snapshot)), ("export",)]:
+        ruby_result, python_result = run.compare(args)
+        assert python_result == ruby_result
+
+
 def test_database_backup_output_and_artifact_match_ruby(tmp_path: Path) -> None:
     run = make_compatibility_run(tmp_path)
 
@@ -193,10 +213,14 @@ def test_database_backup_output_and_artifact_match_ruby(tmp_path: Path) -> None:
         run.python_config, ("database", "backup", str(run.python_root / "backup" / "inventory.db"))
     ).normalized(run.python_root)
 
-    assert python_result == ruby_result == CliResult(
-        returncode=0,
-        stdout="Backed up database to <RUN_ROOT>/backup/inventory.db.\n",
-        stderr="",
+    assert (
+        python_result
+        == ruby_result
+        == CliResult(
+            returncode=0,
+            stdout="Backed up database to <RUN_ROOT>/backup/inventory.db.\n",
+            stderr="",
+        )
     )
     assert (run.ruby_root / "backup" / "inventory.db").exists()
     assert (run.python_root / "backup" / "inventory.db").exists()
