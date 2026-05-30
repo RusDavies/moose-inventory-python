@@ -275,7 +275,7 @@ cases:
       stderr: "ERROR: Wrong number of arguments, 0 for 1 or more.\n"
 
   - id: group-add-ungrouped-rejected
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/group_add_spec.rb:40
     description: automatic group ungrouped cannot be manually manipulated
     args: [group, add, ungrouped]
@@ -287,7 +287,7 @@ cases:
       stderr: "ERROR: Cannot manually manipulate the automatic group 'ungrouped'\n"
 
   - id: group-add-basic
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/group_add_spec.rb:51
     description: adds a group
     args: [group, add, test]
@@ -302,7 +302,7 @@ cases:
       stderr: ""
 
   - id: group-add-dry-run-missing-host
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/group_add_spec.rb:93
     description: group add dry-run with missing host warns but writes nothing
     args: [group, add, dry-run-group, --hosts, dry-run-host, --dry-run]
@@ -316,7 +316,7 @@ cases:
       stderr: "WARNING: Host 'dry-run-host' doesn't exist, but will be created.\n"
 
   - id: group-list-empty
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/group_list_spec.rb:24
     description: group list returns empty YAML mapping with no groups
     args: [group, list]
