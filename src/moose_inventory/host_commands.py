@@ -55,6 +55,10 @@ class HostCommands:
                 return self.get(args[1:])
             if action == "rm":
                 return self.rm(args[1:])
+            if action == "addgroup":
+                return self.addgroup(args[1:])
+            if action == "rmgroup":
+                return self.rmgroup(args[1:])
         except HostCommandError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
@@ -170,6 +174,149 @@ class HostCommands:
         print("Succeeded, with warnings." if warnings else "Succeeded.")
         return 0
 
+    def addgroup(self, raw_args: Sequence[str]) -> int:
+        """Associate a host with one or more groups."""
+        options = parse_relation_options(raw_args, destructive=False)
+        if len(options.names) < 2:
+            print(
+                f"ERROR: Wrong number of arguments, {len(options.names)} for 2 or more.",
+                file=sys.stderr,
+            )
+            return 1
+        host_name = options.names[0].lower()
+        group_names = tuple(name.lower() for name in options.names[1:])
+        if AUTOMATIC_GROUP in group_names:
+            print(
+                "ERROR: Cannot manually manipulate the automatic group 'ungrouped'.",
+                file=sys.stderr,
+            )
+            return 1
+
+        with self.database.engine.begin() as connection:
+            print(f"Associate host '{host_name}' with groups '{','.join(group_names)}':")
+            print(f"  - Retrieve host '{host_name}'...")
+            host_id = find_host_id(connection, host_name)
+            if host_id is None:
+                print(
+                    "An error occurred during a transaction, any changes have been rolled back.",
+                    file=sys.stderr,
+                )
+                print(
+                    f"ERROR: The host '{host_name}' was not found in the database.",
+                    file=sys.stderr,
+                )
+                return 1
+            print("    - OK")
+            for group_name in group_names:
+                print(f"  - Add association {{host:{host_name} <-> group:{group_name}}}...")
+                group_id = find_group_id(connection, group_name)
+                if group_id is None:
+                    print(
+                        f"WARNING: Group '{group_name}' does not exist and will be created.",
+                        end="",
+                        file=sys.stderr,
+                    )
+                    print("    - Group does not exist, creating now...")
+                    if not options.dry_run:
+                        group_id = create_group(connection, group_name)
+                    print("      - OK")
+                if group_id is not None and host_group_exists(connection, host_id, group_id):
+                    print(
+                        f"WARNING: Association {{host:{host_name} <-> group:{group_name}}} "
+                        "already exists, skipping.",
+                        end="",
+                        file=sys.stderr,
+                    )
+                    print("    - Already exists, skipping.")
+                elif not options.dry_run and group_id is not None:
+                    ensure_host_group(connection, host_id, group_id)
+                print("    - OK")
+            if not options.dry_run and host_has_nonautomatic_group(connection, host_id):
+                automatic_id = find_group_id(connection, AUTOMATIC_GROUP)
+                if (
+                    automatic_id is not None
+                    and host_group_exists(connection, host_id, automatic_id)
+                ):
+                    print(
+                        f"  - Remove automatic association "
+                        f"{{host:{host_name} <-> group:ungrouped}}..."
+                    )
+                    remove_host_group(connection, host_id, automatic_id)
+                    print("    - OK")
+            elif options.dry_run:
+                print("Dry run complete. No changes applied.")
+            print("  - All OK")
+        print("Succeeded")
+        return 0
+
+    def rmgroup(self, raw_args: Sequence[str]) -> int:
+        """Dissociate a host from one or more groups."""
+        options = parse_relation_options(raw_args, destructive=True)
+        if len(options.names) < 2:
+            print(
+                f"ERROR: Wrong number of arguments, {len(options.names)} for 2 or more.",
+                file=sys.stderr,
+            )
+            return 1
+        host_name = options.names[0].lower()
+        group_names = tuple(name.lower() for name in options.names[1:])
+        if AUTOMATIC_GROUP in group_names:
+            print(
+                "ERROR: Cannot manually manipulate the automatic group 'ungrouped'.",
+                file=sys.stderr,
+            )
+            return 1
+        if not options.yes and not options.dry_run:
+            print(
+                f"ERROR: host rmgroup {host_name} {','.join(group_names)} is destructive. "
+                "Re-run with --yes to confirm, or use --dry-run to preview.",
+                file=sys.stderr,
+            )
+            return 1
+
+        with self.database.engine.begin() as connection:
+            print(f"Dissociate host '{host_name}' from groups '{','.join(group_names)}':")
+            print(f"  - Retrieve host '{host_name}'...")
+            host_id = find_host_id(connection, host_name)
+            if host_id is None:
+                print(
+                    "An error occurred during a transaction, any changes have been rolled back.",
+                    file=sys.stderr,
+                )
+                print(
+                    f"ERROR: The host '{host_name}' was not found in the database.",
+                    file=sys.stderr,
+                )
+                return 1
+            print("    - OK")
+            for group_name in group_names:
+                print(f"  - Remove association {{host:{host_name} <-> group:{group_name}}}...")
+                group_id = find_group_id(connection, group_name)
+                if group_id is None or not host_group_exists(connection, host_id, group_id):
+                    print(
+                        f"WARNING: Association {{host:{host_name} <-> group:{group_name}}} "
+                        "doesn't exist, skipping.",
+                        file=sys.stderr,
+                    )
+                    print("    - Doesn't exist, skipping.")
+                elif not options.dry_run:
+                    remove_host_group(connection, host_id, group_id)
+                print("    - OK")
+            if not options.dry_run and not host_has_any_group(connection, host_id):
+                automatic_id = find_group_id(connection, AUTOMATIC_GROUP)
+                if automatic_id is None:
+                    automatic_id = create_group(connection, AUTOMATIC_GROUP)
+                print(
+                    f"  - Add automatic association {{host:{host_name} <-> group:ungrouped}}..."
+                )
+                ensure_host_group(connection, host_id, automatic_id)
+                print("    - OK")
+            if options.dry_run:
+                print("Dry run complete. No changes applied.")
+            print("  - All OK")
+        print("Succeeded")
+        return 0
+
 
 def print_host_usage() -> None:
     """Print host command usage."""
@@ -224,6 +371,28 @@ def parse_host_rm_options(raw_args: Sequence[str]) -> HostCommandOptions:
             raise HostCommandError("--plan-format requires --dry-run.")
         else:
             names.append(arg)
+    return HostCommandOptions(tuple(names), dry_run=dry_run, yes=yes)
+
+
+def parse_relation_options(raw_args: Sequence[str], *, destructive: bool) -> HostCommandOptions:
+    """Parse host/group relation command args."""
+    names: list[str] = []
+    dry_run = False
+    yes = False
+    index = 0
+    while index < len(raw_args):
+        arg = raw_args[index]
+        if arg == "--dry-run":
+            dry_run = True
+        elif destructive and arg == "--yes":
+            yes = True
+        elif arg == "--plan-format":
+            if not dry_run:
+                raise HostCommandError("--plan-format requires --dry-run.")
+            index += 1
+        else:
+            names.append(arg)
+        index += 1
     return HostCommandOptions(tuple(names), dry_run=dry_run, yes=yes)
 
 
@@ -300,6 +469,50 @@ def ensure_host_group(connection: Connection, host_id: int, group_id: int) -> No
     ).scalar_one_or_none()
     if exists is None:
         connection.execute(groups_hosts.insert().values(host_id=host_id, group_id=group_id))
+
+
+def host_group_exists(connection: Connection, host_id: int, group_id: int) -> bool:
+    """Return whether host/group association exists."""
+    return (
+        connection.execute(
+            select(groups_hosts.c.id).where(
+                groups_hosts.c.host_id == host_id, groups_hosts.c.group_id == group_id
+            )
+        ).scalar_one_or_none()
+        is not None
+    )
+
+
+def remove_host_group(connection: Connection, host_id: int, group_id: int) -> None:
+    """Remove host/group association."""
+    connection.execute(
+        delete(groups_hosts).where(
+            groups_hosts.c.host_id == host_id, groups_hosts.c.group_id == group_id
+        )
+    )
+
+
+def host_has_nonautomatic_group(connection: Connection, host_id: int) -> bool:
+    """Return whether host has any non-automatic group."""
+    return (
+        connection.execute(
+            select(groups_hosts.c.id)
+            .select_from(groups_hosts.join(groups, groups_hosts.c.group_id == groups.c.id))
+            .where(groups_hosts.c.host_id == host_id, groups.c.name != AUTOMATIC_GROUP)
+            .limit(1)
+        ).scalar_one_or_none()
+        is not None
+    )
+
+
+def host_has_any_group(connection: Connection, host_id: int) -> bool:
+    """Return whether host has any group."""
+    return (
+        connection.execute(
+            select(groups_hosts.c.id).where(groups_hosts.c.host_id == host_id).limit(1)
+        ).scalar_one_or_none()
+        is not None
+    )
 
 
 def delete_host(connection: Connection, host_id: int) -> None:

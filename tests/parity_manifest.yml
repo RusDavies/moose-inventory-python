@@ -247,10 +247,10 @@ cases:
         - "--yes"
 
   - id: host-rmgroup-adds-ungrouped-when-last-group-removed
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/host_rmgroup_spec.rb:59
     description: removing the last non-automatic group adds automatic ungrouped
-    args: [host, rmgroup, web01, web]
+    args: [host, rmgroup, web01, web, --yes]
     setup:
       - [group, add, web]
       - [host, add, web01, --groups, web]
