@@ -52,6 +52,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(USAGE, end="")
         return 0
 
+    try:
+        database_from_runtime(runtime).migrate()
+    except (ConfigError, DatabaseError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
     command = runtime.argv[0]
     if command in {"database", "db"}:
         return run_database_command(runtime)
