@@ -2,6 +2,10 @@
 
 Python CLI/package replacement for the Ruby `moose-inventory` command.
 
+## User guide
+
+See `docs/user-guide.md` for installation, configuration, Ruby migration, doctor, snapshot, Ansible, and read-only console usage.
+
 ## Database backends
 
 The Python CLI supports the Ruby-compatible `sqlite3`, `mysql`, and `postgresql` adapter names. SQLite works with the base install; MySQL/MariaDB and PostgreSQL use optional extras:
