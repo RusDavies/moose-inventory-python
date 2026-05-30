@@ -76,9 +76,18 @@ class CompatibilityRun:
 
     def compare(self, args: tuple[str, ...]) -> tuple[CliResult, CliResult]:
         """Run a command on both implementations and return normalized results."""
-        ruby_result = self.ruby.run(self.ruby_config, args).normalized(self.ruby_root)
-        python_result = self.python.run(self.python_config, args).normalized(self.python_root)
+        ruby_args = materialize_args(args, self.ruby_root)
+        python_args = materialize_args(args, self.python_root)
+        ruby_result = self.ruby.run(self.ruby_config, ruby_args).normalized(self.ruby_root)
+        python_result = self.python.run(self.python_config, python_args).normalized(
+            self.python_root
+        )
         return ruby_result, python_result
+
+    def for_manifest_case(self, case: dict[str, object]) -> CompatibilityRun:
+        """Return a run context adjusted for manifest case options."""
+        del case
+        return self
 
 
 def ruby_available() -> bool:
@@ -116,6 +125,11 @@ def make_compatibility_run(tmp_path: Path) -> CompatibilityRun:
         ruby_config=ruby_config,
         python_config=python_config,
     )
+
+
+def materialize_args(args: tuple[str, ...], root: Path) -> tuple[str, ...]:
+    """Replace manifest placeholders with implementation-specific paths."""
+    return tuple(arg.replace("<RUN_ROOT>", str(root.resolve())) for arg in args)
 
 
 def write_config(root: Path) -> Path:
