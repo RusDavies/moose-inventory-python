@@ -4,10 +4,11 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 
 ## Open
 
-- [ ] Port dry-run and machine-readable plan output for all mutating command families, including `--plan-format` validation.
 - [ ] Run full parity/release gate and record evidence before any public package release.
 
 ## Done
+
+- [x] Port dry-run and machine-readable plan output for all mutating command families, including `--plan-format` validation.
 
 - [x] Add package/release documentation for PyPI publication, release ownership, artifact integrity/provenance, and vulnerability intake/security patch process.
 - [x] Add user documentation for installing the Python CLI, configuring backends, migrating from Ruby, verifying with `doctor`, exporting snapshots before switching, and using Ansible.

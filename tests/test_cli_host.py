@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -91,6 +92,43 @@ def test_host_rm_requires_confirmation(tmp_path: Path, capsys: pytest.CaptureFix
         "ERROR: host rm web01 is destructive. Re-run with --yes to confirm, "
         "or use --dry-run to preview.\n"
     )
+
+
+def test_host_rm_plan_format_is_machine_readable_and_non_mutating(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_config(tmp_path)
+    assert main(["--config", str(config), "host", "add", "web01"]) == 0
+    capsys.readouterr()
+
+    assert (
+        main(
+            [
+                "--config",
+                str(config),
+                "host",
+                "rm",
+                "web01",
+                "--dry-run",
+                "--plan-format",
+                "json",
+            ]
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    plan = json.loads(captured.out)
+    assert plan["command"] == "host rm"
+    assert plan["dry_run"] is True
+    assert plan["changes_applied"] is False
+    assert plan["exit_code"] == 0
+    assert "Dry run complete. No changes applied." in plan["stdout"]
+    assert any(event["type"] == "dry_run_summary" for event in plan["events"])
+    assert captured.err == ""
+
+    assert main(["--config", str(config), "host", "get", "web01"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == '{"web01":{"groups":["ungrouped"]}}\n'
 
 
 def test_host_add_with_group_creates_missing_group(

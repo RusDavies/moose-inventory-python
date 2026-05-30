@@ -128,8 +128,8 @@ Audit records are append-only mutation evidence. Dry runs must not create mutati
 - `host rmvar HOSTNAME VARNAME [VARNAME ...] [--dry-run] [--yes] [--plan-format yaml|json|pjson]`
 - `host listvar HOSTNAME [HOSTNAME ...]`
 - `host listvars HOSTNAME [HOSTNAME ...]`
-- `host addtag HOST TAG_1 [TAG_2 ...]`
-- `host rmtag HOST TAG_1 [TAG_2 ...] [--yes]`
+- `host addtag HOST TAG_1 [TAG_2 ...] [--dry-run] [--plan-format yaml|json|pjson]`
+- `host rmtag HOST TAG_1 [TAG_2 ...] [--dry-run] [--yes] [--plan-format yaml|json|pjson]`
 - `host listtags HOST [--format yaml|json|pjson]`
 
 ### Group commands
@@ -146,8 +146,8 @@ Audit records are append-only mutation evidence. Dry runs must not create mutati
 - `group rmvar GROUP VARNAME [VARNAME ...] [--dry-run] [--yes] [--plan-format yaml|json|pjson]`
 - `group listvar GROUP [GROUP ...]`
 - `group listvars GROUP [GROUP ...]`
-- `group addtag GROUP TAG_1 [TAG_2 ...]`
-- `group rmtag GROUP TAG_1 [TAG_2 ...] [--yes]`
+- `group addtag GROUP TAG_1 [TAG_2 ...] [--dry-run] [--plan-format yaml|json|pjson]`
+- `group rmtag GROUP TAG_1 [TAG_2 ...] [--dry-run] [--yes] [--plan-format yaml|json|pjson]`
 - `group listtags GROUP [--format yaml|json|pjson]`
 
 ## Database backend and schema baseline

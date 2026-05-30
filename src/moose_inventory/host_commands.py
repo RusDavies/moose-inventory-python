@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
+from io import StringIO
 from typing import Any, cast
 
 import yaml
@@ -49,33 +51,41 @@ class HostCommands:
 
         action = args[0]
         try:
-            if action == "add":
-                return self.add(args[1:])
-            if action == "list":
-                return self.list_hosts(args[1:])
-            if action == "get":
-                return self.get(args[1:])
-            if action == "rm":
-                return self.rm(args[1:])
-            if action == "addgroup":
-                return self.addgroup(args[1:])
-            if action == "rmgroup":
-                return self.rmgroup(args[1:])
-            if action == "addvar":
-                return self.addvar(args[1:])
-            if action == "rmvar":
-                return self.rmvar(args[1:])
-            if action in {"listvar", "listvars"}:
-                return self.listvars(args[1:])
-            if action == "addtag":
-                return self.addtag(args[1:])
-            if action == "rmtag":
-                return self.rmtag(args[1:])
-            if action == "listtags":
-                return self.listtags(args[1:])
+            if "--plan-format" in args[1:] and action != "add":
+                return render_dry_run_plan(
+                    f"host {action}", args[1:], lambda stripped: self._run_action(action, stripped)
+                )
+            return self._run_action(action, args[1:])
         except HostCommandError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
+
+    def _run_action(self, action: str, raw_args: Sequence[str]) -> int:
+        """Run a host action without top-level plan interception."""
+        if action == "add":
+            return self.add(raw_args)
+        if action == "list":
+            return self.list_hosts(raw_args)
+        if action == "get":
+            return self.get(raw_args)
+        if action == "rm":
+            return self.rm(raw_args)
+        if action == "addgroup":
+            return self.addgroup(raw_args)
+        if action == "rmgroup":
+            return self.rmgroup(raw_args)
+        if action == "addvar":
+            return self.addvar(raw_args)
+        if action == "rmvar":
+            return self.rmvar(raw_args)
+        if action in {"listvar", "listvars"}:
+            return self.listvars(raw_args)
+        if action == "addtag":
+            return self.addtag(raw_args)
+        if action == "rmtag":
+            return self.rmtag(raw_args)
+        if action == "listtags":
+            return self.listtags(raw_args)
 
         print(f"ERROR: host action '{action}' is not implemented.", file=sys.stderr)
         return 1
@@ -440,7 +450,11 @@ class HostCommands:
             if host_id is None:
                 print(f"ERROR: The host '{host_name}' does not exist.", file=sys.stderr)
                 return 1
-            changed = add_host_tags(connection, host_id, tag_names)
+            changed = (
+                tag_names if options.dry_run else add_host_tags(connection, host_id, tag_names)
+            )
+        if options.dry_run:
+            print("Dry run complete. No changes applied.")
         print(f"Added host tag(s) to '{host_name}': {', '.join(changed)}.")
         return 0
 
@@ -455,10 +469,10 @@ class HostCommands:
             return 1
         host_name = options.names[0].lower()
         tag_names = normalize_tags(options.names[1:])
-        if not options.yes:
+        if not options.yes and not options.dry_run:
             print(
                 f"ERROR: host rmtag {host_name} {','.join(tag_names)} is destructive. "
-                "Re-run with --yes to confirm.",
+                "Re-run with --yes to confirm, or use --dry-run to preview.",
                 file=sys.stderr,
             )
             return 1
@@ -467,7 +481,11 @@ class HostCommands:
             if host_id is None:
                 print(f"ERROR: The host '{host_name}' does not exist.", file=sys.stderr)
                 return 1
-            changed = remove_host_tags(connection, host_id, tag_names)
+            changed = (
+                tag_names if options.dry_run else remove_host_tags(connection, host_id, tag_names)
+            )
+        if options.dry_run:
+            print("Dry run complete. No changes applied.")
         print(f"Removed host tag(s) from '{host_name}': {', '.join(changed)}.")
         return 0
 
@@ -596,8 +614,6 @@ def parse_host_add_options(raw_args: Sequence[str]) -> HostCommandOptions:
             requested_groups.extend(split_csv(raw_args[index + 1]))
             index += 2
         elif arg == "--plan-format":
-            if not dry_run:
-                raise HostCommandError("--plan-format requires --dry-run.")
             if index + 1 >= len(raw_args):
                 raise HostCommandError("Expected a value after --plan-format")
             plan_format = raw_args[index + 1]
@@ -605,6 +621,10 @@ def parse_host_add_options(raw_args: Sequence[str]) -> HostCommandOptions:
         else:
             names.append(arg)
             index += 1
+    if plan_format is not None:
+        if not dry_run:
+            raise HostCommandError("--plan-format requires --dry-run.")
+        validate_plan_format(plan_format)
     return HostCommandOptions(
         tuple(names), tuple(requested_groups), dry_run=dry_run, plan_format=plan_format
     )
@@ -655,12 +675,21 @@ def parse_tag_options(
     """Parse host tag command args."""
     names: list[str] = []
     yes = False
+    dry_run = False
     output_format: str | None = None
     index = 0
     while index < len(raw_args):
         arg = raw_args[index]
-        if destructive and arg == "--yes":
+        if arg == "--dry-run":
+            dry_run = True
+        elif destructive and arg == "--yes":
             yes = True
+        elif arg == "--plan-format":
+            if not dry_run:
+                raise HostCommandError("--plan-format requires --dry-run.")
+            if index + 1 >= len(raw_args):
+                raise HostCommandError("Expected a value after --plan-format")
+            index += 1
         elif allow_format and arg == "--format":
             if index + 1 >= len(raw_args):
                 raise HostCommandError("Expected a value after --format")
@@ -669,7 +698,7 @@ def parse_tag_options(
         else:
             names.append(arg)
         index += 1
-    return HostCommandOptions(tuple(names), yes=yes, output_format=output_format)
+    return HostCommandOptions(tuple(names), dry_run=dry_run, yes=yes, output_format=output_format)
 
 
 def parse_host_list_options(raw_args: Sequence[str]) -> dict[str, tuple[str, ...] | dict[str, str]]:
@@ -1001,3 +1030,74 @@ def dump_data(data: dict[str, Any], output_format: str) -> None:
         print(yaml.safe_dump(data, sort_keys=False), end="")
     else:
         raise HostCommandError(f"Output format '{output_format}' is not yet supported.")
+
+
+def render_dry_run_plan(
+    command: str,
+    raw_args: Sequence[str],
+    runner: Callable[[Sequence[str]], int],
+) -> int:
+    """Render machine-readable dry-run output for mutating commands.
+
+    Most Ruby-compatible mutators already have human-readable ``--dry-run`` output. The
+    plan form wraps that preview in a stable structural envelope without applying changes.
+    """
+    stripped_args, plan_format = extract_plan_format(raw_args)
+    stdout = StringIO()
+    stderr = StringIO()
+    with redirect_stdout(stdout), redirect_stderr(stderr):
+        exit_code = runner(stripped_args)
+    stdout_lines = stdout.getvalue().splitlines()
+    stderr_lines = stderr.getvalue().splitlines()
+    events: list[dict[str, Any]] = []
+    for line in stdout_lines:
+        event_type = (
+            "dry_run_summary" if line == "Dry run complete. No changes applied." else "stdout"
+        )
+        events.append({"type": event_type, "payload": {"line": line}})
+    for line in stderr_lines:
+        events.append({"type": "stderr", "payload": {"line": line}})
+    dump_data(
+        {
+            "command": command,
+            "dry_run": True,
+            "changes_applied": False,
+            "exit_code": exit_code,
+            "stdout": stdout_lines,
+            "stderr": stderr_lines,
+            "events": events,
+        },
+        plan_format,
+    )
+    return exit_code
+
+
+def extract_plan_format(raw_args: Sequence[str]) -> tuple[tuple[str, ...], str]:
+    """Remove --plan-format from args and return its requested output format."""
+    if "--dry-run" not in raw_args:
+        raise HostCommandError("--plan-format requires --dry-run.")
+    stripped: list[str] = []
+    plan_format: str | None = None
+    index = 0
+    while index < len(raw_args):
+        arg = raw_args[index]
+        if arg == "--plan-format":
+            if index + 1 >= len(raw_args):
+                raise HostCommandError("Expected a value after --plan-format")
+            if plan_format is not None:
+                raise HostCommandError("--plan-format may only be specified once.")
+            plan_format = raw_args[index + 1]
+            index += 2
+            continue
+        stripped.append(arg)
+        index += 1
+    if plan_format is None:
+        raise HostCommandError("Expected --plan-format.")
+    validate_plan_format(plan_format)
+    return tuple(stripped), plan_format
+
+
+def validate_plan_format(plan_format: str) -> None:
+    """Validate machine-readable plan formats early for clearer errors."""
+    if plan_format.lower() not in {"json", "j", "prettyjson", "pjson", "p", "yaml", "y"}:
+        raise HostCommandError(f"Output format '{plan_format}' is not yet supported.")
