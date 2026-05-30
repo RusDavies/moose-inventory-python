@@ -1,0 +1,533 @@
+schema_version: 1
+name: moose-inventory Ruby/Python CLI parity manifest
+ruby_reference_root: ../moose-inventory
+purpose: >-
+  Command-level golden and structural parity cases extracted from the Ruby RSpec
+  suite. Active cases are enforced by the Python compatibility harness now;
+  pending cases become active as command families are ported.
+normalization:
+  - Replace each implementation's disposable run root with <RUN_ROOT>.
+  - Use separate SQLite config/database roots per implementation.
+  - Compare exact stdout/stderr/exit status for human-output cases unless compare.mode says otherwise.
+  - Parse YAML/JSON for structural cases where field ordering is not compatibility-protected.
+case_statuses:
+  active: Python implementation should currently match Ruby.
+  pending_python_port: Ruby behavior captured; activate when the command family is ported.
+cases:
+  - id: database-status-current
+    status: active
+    source: spec/lib/moose_inventory/db_lifecycle_spec.rb:21
+    description: prints current database lifecycle status after startup migration
+    args: [database, status]
+    setup: []
+    compare:
+      mode: exact
+    expected:
+      returncode: 0
+      stdout_contains:
+        - "Adapter: sqlite3\n"
+        - "Schema version: 4\n"
+        - "Expected schema version: 4\n"
+        - "- groups_tags: present\n"
+      stderr: ""
+
+  - id: database-doctor-current
+    status: active
+    source: spec/lib/moose_inventory/db_lifecycle_spec.rb:31
+    description: db doctor succeeds when schema is current
+    args: [database, doctor]
+    setup: []
+    compare:
+      mode: exact
+    expected:
+      returncode: 0
+      stdout: "Database doctor found no issues.\n"
+      stderr: ""
+
+  - id: database-migrate-current
+    status: active
+    source: spec/lib/moose_inventory/db_lifecycle_spec.rb:48
+    description: migrate records current schema version
+    args: [database, migrate]
+    setup: []
+    compare:
+      mode: exact
+    expected:
+      returncode: 0
+      stdout: "Database schema is at version 4.\n"
+      stderr: ""
+
+  - id: database-alias-status
+    status: active
+    source: lib/moose_inventory/cli/application.rb:72
+    description: db is an alias for database
+    args: [db, status]
+    setup: []
+    compare:
+      mode: exact
+    expected:
+      returncode: 0
+      stdout_contains:
+        - "Adapter: sqlite3\n"
+        - "Schema version: 4\n"
+      stderr: ""
+
+  - id: database-backup-sqlite
+    status: active
+    source: spec/lib/moose_inventory/db_lifecycle_spec.rb:59
+    description: backs up configured sqlite database file
+    args: [database, backup, "<RUN_ROOT>/backup/inventory.db"]
+    setup: []
+    compare:
+      mode: exact
+      artifact_exists: ["backup/inventory.db"]
+    expected:
+      returncode: 0
+      stdout: "Backed up database to <RUN_ROOT>/backup/inventory.db.\n"
+      stderr: ""
+
+  - id: version-command
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/application_spec.rb:7
+    description: prints current Moose Inventory version
+    args: [version]
+    setup: []
+    compare:
+      mode: pattern
+    expected:
+      returncode: 0
+      stdout_regex: "^Version .+\\n$"
+      stderr: ""
+
+  - id: host-add-missing-args
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/host_add_spec.rb:26
+    description: host add without arguments aborts with Thor arity error
+    args: [host, add]
+    setup: []
+    compare:
+      mode: exact
+    expected:
+      returncode: nonzero
+      stderr: "ERROR: Wrong number of arguments, 0 for 1 or more.\n"
+
+  - id: host-add-basic
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/host_add_spec.rb:35
+    description: adds host and automatic ungrouped association
+    args: [host, add, test-host-add]
+    setup: []
+    compare:
+      mode: exact
+    expected:
+      stdout_contains:
+        - "Add host 'test-host-add':\n"
+        - "- Creating host 'test-host-add'...\n"
+        - "- Adding automatic association {host:test-host-add <-> group:ungrouped}...\n"
+        - "Succeeded\n"
+      stderr: ""
+
+  - id: host-add-dry-run
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/host_add_spec.rb:64
+    description: host add dry-run renders plan text without writing
+    args: [host, add, dry-run-host, --dry-run]
+    setup: []
+    compare:
+      mode: exact
+    expected:
+      stdout_contains:
+        - "Dry run complete. No changes applied.\n"
+        - "Succeeded\n"
+      db_assertions:
+        - host_absent: dry-run-host
+
+  - id: host-add-plan-json
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/host_add_spec.rb:109
+    description: host add dry-run plan emits machine-readable JSON only
+    args: [host, add, plan-host, --dry-run, --plan-format, json]
+    setup: []
+    compare:
+      mode: json_structural
+    expected:
+      json:
+        command: host add
+        dry_run: true
+        changes_applied: false
+        event_types_include: [creating_host, dry_run_summary]
+      stdout_not_contains: [Succeeded]
+      stderr: ""
+
+  - id: host-add-plan-without-dry-run
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/host_add_spec.rb:127
+    description: --plan-format without --dry-run aborts before writing
+    args: [host, add, plan-host-without-dry-run, --plan-format, json]
+    setup: []
+    compare:
+      mode: exact
+    expected:
+      returncode: nonzero
+      stderr: "ERROR: --plan-format requires --dry-run.\n"
+
+  - id: host-list-empty
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/host_list_spec.rb:26
+    description: host list returns empty YAML mapping with no hosts
+    args: [host, list]
+    setup: []
+    compare:
+      mode: yaml_structural
+    expected:
+      yaml: {}
+      stderr: ""
+
+  - id: host-list-filtered
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/host_list_spec.rb:57
+    description: host list filters by group, tag, and variable
+    args: [host, list, --group, web, --tag, prod, --var, os=fedora]
+    setup:
+      - [group, add, web]
+      - [host, add, web01, --groups, web]
+      - [host, add, db01]
+      - [host, addtag, web01, prod]
+      - [host, addvar, web01, os=fedora]
+      - [host, addtag, db01, prod]
+      - [host, addvar, db01, os=debian]
+    compare:
+      mode: yaml_structural
+    expected:
+      yaml:
+        web01:
+          groups: [web]
+          tags: [prod]
+          hostvars: {os: fedora}
+
+  - id: host-get-missing
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/host_get_spec.rb:37
+    description: host get missing host returns empty YAML mapping
+    args: [host, get, missing]
+    setup: []
+    compare:
+      mode: yaml_structural
+    expected:
+      yaml: {}
+
+  - id: host-addvar-malformed
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/host_addvar_spec.rb:58
+    description: host addvar rejects malformed key/value pairs
+    args: [host, addvar, web01, malformed]
+    setup:
+      - [host, add, web01]
+    compare:
+      mode: exact
+    expected:
+      returncode: nonzero
+      stderr_contains:
+        - "ERROR:"
+        - "malformed"
+
+  - id: host-rm-requires-yes-or-dry-run
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/host_rm_spec.rb:60
+    description: host rm without --yes or --dry-run aborts before deleting
+    args: [host, rm, web01]
+    setup:
+      - [host, add, web01]
+    compare:
+      mode: exact
+    expected:
+      returncode: nonzero
+      stderr_contains:
+        - "ERROR:"
+        - "--yes"
+
+  - id: host-rmgroup-adds-ungrouped-when-last-group-removed
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/host_rmgroup_spec.rb:59
+    description: removing the last non-automatic group adds automatic ungrouped
+    args: [host, rmgroup, web01, web]
+    setup:
+      - [group, add, web]
+      - [host, add, web01, --groups, web]
+    compare:
+      mode: exact
+    expected:
+      stdout_contains:
+        - "Succeeded"
+      db_assertions:
+        - host_groups: {host: web01, groups: [ungrouped]}
+
+  - id: group-add-missing-args
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/group_add_spec.rb:31
+    description: group add without arguments aborts with Thor arity error
+    args: [group, add]
+    setup: []
+    compare:
+      mode: exact
+    expected:
+      returncode: nonzero
+      stderr: "ERROR: Wrong number of arguments, 0 for 1 or more.\n"
+
+  - id: group-add-ungrouped-rejected
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/group_add_spec.rb:40
+    description: automatic group ungrouped cannot be manually manipulated
+    args: [group, add, ungrouped]
+    setup: []
+    compare:
+      mode: exact
+    expected:
+      returncode: nonzero
+      stderr: "ERROR: Cannot manually manipulate the automatic group 'ungrouped'\n"
+
+  - id: group-add-basic
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/group_add_spec.rb:51
+    description: adds a group
+    args: [group, add, test]
+    setup: []
+    compare:
+      mode: exact
+    expected:
+      stdout_contains:
+        - "Add group 'test':\n"
+        - "- create group...\n"
+        - "Succeeded\n"
+      stderr: ""
+
+  - id: group-add-dry-run-missing-host
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/group_add_spec.rb:93
+    description: group add dry-run with missing host warns but writes nothing
+    args: [group, add, dry-run-group, --hosts, dry-run-host, --dry-run]
+    setup: []
+    compare:
+      mode: exact
+    expected:
+      stdout_contains:
+        - "Dry run complete. No changes applied.\n"
+        - "Succeeded, with warnings.\n"
+      stderr: "WARNING: Host 'dry-run-host' doesn't exist, but will be created.\n"
+
+  - id: group-list-empty
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/group_list_spec.rb:24
+    description: group list returns empty YAML mapping with no groups
+    args: [group, list]
+    setup: []
+    compare:
+      mode: yaml_structural
+    expected:
+      yaml: {}
+      stderr: ""
+
+  - id: group-list-ansible-alias
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/group_list_spec.rb:57
+    description: --list is an alias for Ansible group list mode
+    args: [--list]
+    setup:
+      - [group, add, web]
+      - [host, add, web01, --groups, web]
+    compare:
+      mode: json_structural
+    expected:
+      json_contains_keys: [_meta, web]
+
+  - id: group-addchild-basic
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/group_addchild_spec.rb:122
+    description: associates parent group with existing child group
+    args: [group, addchild, parent, child]
+    setup:
+      - [group, add, parent]
+      - [group, add, child]
+    compare:
+      mode: exact
+    expected:
+      stdout_contains:
+        - "Succeeded"
+      stderr: ""
+
+  - id: group-addchild-circular-rejected
+    status: pending_python_port
+    source: spec/lib/moose_inventory/operations/group_child_relations_spec.rb
+    description: circular child-group relationships are rejected
+    args: [group, addchild, child, parent]
+    setup:
+      - [group, add, parent]
+      - [group, add, child]
+      - [group, addchild, parent, child]
+    compare:
+      mode: exact
+    expected:
+      returncode: nonzero
+      stderr_contains:
+        - "ERROR:"
+        - "circular"
+
+  - id: group-rmchild-delete-orphans-dry-run
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/group_rmchild_spec.rb:176
+    description: rmchild --delete-orphans --dry-run reports recursive cleanup without deleting
+    args: [group, rmchild, parent, child, --delete-orphans, --dry-run]
+    setup:
+      - [group, add, parent]
+      - [group, add, child]
+      - [group, addchild, parent, child]
+    compare:
+      mode: exact
+    expected:
+      stdout_contains:
+        - "Dry run complete. No changes applied."
+
+  - id: group-addvar-basic
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/group_addvar_spec.rb:96
+    description: associates group with key/value variable
+    args: [group, addvar, web, role=frontend]
+    setup:
+      - [group, add, web]
+    compare:
+      mode: exact
+    expected:
+      stdout_contains:
+        - "Succeeded"
+      stderr: ""
+
+  - id: group-listvar-ansible
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/group_listvar_spec.rb:74
+    description: returns group variables in Ansible-style hostvars payload
+    args: [group, listvars, web, --ansible]
+    setup:
+      - [group, add, web]
+      - [group, addvar, web, role=frontend]
+    compare:
+      mode: json_structural
+    expected:
+      json_contains_keys: [_meta]
+
+  - id: host-listvar-ansible-host-alias
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/host_listvar_spec.rb:122
+    description: --host HOST is an alias for Ansible host variable lookup
+    args: [--host, web01]
+    setup:
+      - [host, add, web01]
+      - [host, addvar, web01, os=fedora]
+    compare:
+      mode: json_structural
+    expected:
+      json: {os: fedora}
+
+  - id: host-tags-normalize-dedupe
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/tags_spec.rb:27
+    description: host tag casing is normalized and duplicate values are deduped
+    args: [host, listtags, app01]
+    setup:
+      - [host, add, app01]
+      - [host, addtag, app01, Prod, PROD, owner-platform]
+    compare:
+      mode: exact
+    expected:
+      stdout: "Host 'app01' tags: owner-platform, prod\n"
+      stderr: ""
+
+  - id: group-tags-json
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/tags_spec.rb:52
+    description: group listtags supports JSON output
+    args: [group, listtags, web, --format, json]
+    setup:
+      - [group, add, web]
+      - [group, addtag, web, frontend, owner-platform]
+    compare:
+      mode: json_structural
+    expected:
+      json:
+        group: web
+        tags: [frontend, owner-platform]
+
+  - id: export-snapshot-yaml
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/application_import_export_spec.rb:16
+    description: exports current inventory snapshot as YAML
+    args: [export]
+    setup:
+      - [group, add, web]
+      - [host, add, web01, --groups, web]
+    compare:
+      mode: yaml_structural
+    expected:
+      yaml_contains_keys: [version, hosts, groups]
+
+  - id: import-preview-yaml
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/application_import_export_spec.rb:56
+    description: previews snapshot import without writing
+    args: [import, "<FIXTURE:snapshot.yml>", --preview]
+    setup: []
+    compare:
+      mode: exact
+    expected:
+      stdout_contains:
+        - "Snapshot import preview. No changes applied.\n"
+
+  - id: inventory-doctor-human-ok
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/application_doctor_spec.rb:15
+    description: inventory doctor prints human success report when no issues are found
+    args: [doctor]
+    setup: []
+    compare:
+      mode: exact
+    expected:
+      returncode: 0
+      stdout: "Inventory doctor found no issues.\n"
+      stderr: ""
+
+  - id: inventory-doctor-json
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/application_doctor_spec.rb:37
+    description: inventory doctor emits machine-readable JSON when requested
+    args: [doctor, --format, json]
+    setup: []
+    compare:
+      mode: json_structural
+    expected:
+      json_contains_keys: [ok, issue_count, issues]
+
+  - id: audit-list-empty
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/audit_spec.rb:16
+    description: audit list starts with an empty audit log
+    args: [audit, list, --format, json]
+    setup: []
+    compare:
+      mode: json_structural
+    expected:
+      json: []
+
+  - id: audit-records-host-add
+    status: pending_python_port
+    source: spec/lib/moose_inventory/cli/audit_spec.rb:22
+    description: successful mutating host commands are recorded in audit log
+    args: [audit, list, --format, json]
+    setup:
+      - [host, add, app01]
+    compare:
+      mode: json_structural
+    expected:
+      json_event_contains:
+        command: host add
+        action: add
+        entity_type: host
+        entity_name: app01
