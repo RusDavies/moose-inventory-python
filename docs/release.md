@@ -1,0 +1,83 @@
+# Release and Package Operations
+
+This project publishes a Python command package whose compatibility contract is the `moose-inventory` CLI. Treat releases as operator-impacting even though this is not a hosted service.
+
+## Ownership
+
+- Package owner: Russ Davies / `RusDavies` project namespace.
+- Release branch source: `master` after all feature branches have been merged.
+- Ruby reference: sibling `projects/moose-inventory`; parity tests must pass when Ruby is available.
+
+## Pre-release gate
+
+Run the full local gate from a clean tree:
+
+```bash
+git status --short
+./scripts/check.sh
+```
+
+The gate runs:
+
+1. `pytest`
+2. `ruff check src tests`
+3. `mypy`
+4. package build
+5. `twine check dist/*`
+
+Before a public release, also run any available real-backend smoke checks for MySQL/MariaDB and PostgreSQL, because the default test suite only instantiates network database URLs and does not open service connections.
+
+## Artifact integrity
+
+Build artifacts are created under `dist/` and should be regenerated for each release:
+
+```bash
+rm -rf dist build *.egg-info
+python -m build
+python -m twine check dist/*
+sha256sum dist/*
+```
+
+Record the exact git commit, package version, filenames, and SHA-256 hashes in release notes. Do not publish artifacts built from a dirty tree. The robots have enough ways to embarrass us without handing them that one.
+
+## PyPI publication
+
+Preferred publication path is PyPI trusted publishing from CI once configured. Until then, use a scoped PyPI API token stored outside the repository:
+
+```bash
+python -m twine upload dist/*
+```
+
+Never commit PyPI tokens, `.pypirc`, generated credentials, database passwords, or local config files.
+
+## Versioning
+
+The initial package version is `0.0.0` while compatibility work is still pre-release. Before first public release:
+
+1. Choose the release version in `pyproject.toml`.
+2. Update docs/examples if the package name or extras change.
+3. Run the full gate.
+4. Tag the release after the final verification commit.
+
+## Vulnerability intake and security patches
+
+Until a formal security advisory process exists, use the GitHub repository security advisory flow or private maintainer contact for vulnerability reports. Security fixes should:
+
+1. Reproduce or characterize the issue privately.
+2. Add regression tests when safe.
+3. Patch with the smallest compatible change.
+4. Run the full gate.
+5. Publish a fixed package and advisory notes if public users may be affected.
+
+For dependency vulnerabilities, update the affected dependency bounds only after checking compatibility with the CLI, schema, and package build gates.
+
+## Release evidence packet
+
+Keep release evidence in `docs/release-evidence/` or equivalent release notes:
+
+- Commit SHA and branch.
+- `./scripts/check.sh` output summary.
+- Ruby/Python parity status.
+- Package filenames and SHA-256 hashes.
+- Backend smoke evidence, including any skipped real-service checks.
+- Known limitations or compatibility exceptions.
