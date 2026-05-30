@@ -21,6 +21,8 @@ from moose_inventory.host_commands import (
     find_host_id,
     host_group_exists,
     host_has_any_group,
+    parse_variable,
+    parse_variable_for_remove,
     remove_host_group,
     split_csv,
 )
@@ -65,6 +67,12 @@ class GroupCommands:
                 return self.addhost(args[1:])
             if action == "rmhost":
                 return self.rmhost(args[1:])
+            if action == "addvar":
+                return self.addvar(args[1:])
+            if action == "rmvar":
+                return self.rmvar(args[1:])
+            if action in {"listvar", "listvars"}:
+                return self.listvars(args[1:])
         except HostCommandError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
@@ -192,6 +200,129 @@ class GroupCommands:
         if options.dry_run:
             print("Dry run complete. No changes applied.")
         print("Succeeded, with warnings." if warnings else "Succeeded.")
+        return 0
+
+    def addvar(self, raw_args: Sequence[str]) -> int:
+        """Add or update group variables."""
+        options = parse_group_relation_options(raw_args, destructive=False)
+        if len(options.names) < 2:
+            print(
+                f"ERROR: Wrong number of arguments, {len(options.names)} for 2 or more.",
+                file=sys.stderr,
+            )
+            return 1
+        group_name = options.names[0].lower()
+        variables = tuple(dict.fromkeys(options.names[1:]))
+        return self._change_vars(
+            entity_name=group_name,
+            variables=variables,
+            remove=False,
+            dry_run=options.dry_run,
+        )
+
+    def rmvar(self, raw_args: Sequence[str]) -> int:
+        """Remove group variables."""
+        options = parse_group_relation_options(raw_args, destructive=True)
+        if len(options.names) < 2:
+            print(
+                f"ERROR: Wrong number of arguments, {len(options.names)} for 2 or more.",
+                file=sys.stderr,
+            )
+            return 1
+        group_name = options.names[0].lower()
+        variables = tuple(dict.fromkeys(options.names[1:]))
+        if not options.yes and not options.dry_run:
+            print(
+                f"ERROR: group rmvar {group_name} {','.join(variables)} is destructive. "
+                "Re-run with --yes to confirm, or use --dry-run to preview.",
+                file=sys.stderr,
+            )
+            return 1
+        return self._change_vars(
+            entity_name=group_name,
+            variables=variables,
+            remove=True,
+            dry_run=options.dry_run,
+        )
+
+    def listvars(self, raw_args: Sequence[str]) -> int:
+        """List variables for one or more groups."""
+        names = tuple(arg.lower() for arg in raw_args if not arg.startswith("--"))
+        if self.runtime.ansible and len(names) != 1:
+            print(
+                f"ERROR: Wrong number of arguments for Ansible mode, {len(names)} for 1.",
+                file=sys.stderr,
+            )
+            return 1
+        if not self.runtime.ansible and not names:
+            print("ERROR: Wrong number of arguments, 0 for 1 or more.", file=sys.stderr)
+            return 1
+        with self.database.connect() as connection:
+            data = query_group_vars(connection, names)
+        if self.runtime.ansible:
+            if names[0] not in data:
+                print(f"WARNING: The Group {names[0]} does not exist.", end="", file=sys.stderr)
+                dump_data({}, self.runtime.output_format)
+            else:
+                dump_data(data[names[0]], self.runtime.output_format)
+        else:
+            dump_data(data, self.runtime.output_format)
+        return 0
+
+    def _change_vars(
+        self,
+        *,
+        entity_name: str,
+        variables: tuple[str, ...],
+        remove: bool,
+        dry_run: bool,
+    ) -> int:
+        action = "Remove variable(s)" if remove else "Add variables"
+        preposition = "from" if remove else "to"
+        verb = "remove" if remove else "add"
+        print(f"{action} '{','.join(variables)}' {preposition} group '{entity_name}':")
+        print(f"  - retrieve group '{entity_name}'...")
+        with self.database.engine.begin() as connection:
+            group_id = find_group_id(connection, entity_name)
+            if group_id is None:
+                print(
+                    "An error occurred during a transaction, any changes have been rolled back.",
+                    file=sys.stderr,
+                )
+                print(f"ERROR: The group '{entity_name}' does not exist.", file=sys.stderr)
+                return 1
+            print("    - OK")
+            for variable in variables:
+                print(f"  - {verb} variable '{variable}'...")
+                try:
+                    if remove:
+                        key, value = parse_variable_for_remove(variable)
+                    else:
+                        key, value = parse_variable(variable)
+                except HostCommandError as exc:
+                    print(
+                        "An error occurred during a transaction, "
+                        "any changes have been rolled back.",
+                        file=sys.stderr,
+                    )
+                    print(f"ERROR: {exc}", file=sys.stderr)
+                    return 1
+                if remove:
+                    if not dry_run:
+                        remove_group_variable(connection, group_id, key)
+                else:
+                    existing = find_group_variable_id(connection, group_id, key)
+                    if existing is not None:
+                        print("    - already exists, applying as an update...")
+                        if not dry_run:
+                            update_group_variable(connection, int(existing), value)
+                    elif not dry_run:
+                        create_group_variable(connection, group_id, key, value)
+                print("    - OK")
+            print("  - all OK")
+        if dry_run:
+            print("Dry run complete. No changes applied.")
+        print("Succeeded.")
         return 0
 
     def addhost(self, raw_args: Sequence[str]) -> int:
@@ -491,3 +622,47 @@ def group_payload(connection: Connection, group_id: int) -> dict[str, Any]:
     if variables:
         payload["groupvars"] = {str(row.name): row.value for row in variables}
     return payload
+
+
+def find_group_variable_id(connection: Connection, group_id: int, name: str) -> int | None:
+    """Find a group variable id by group and name."""
+    value = connection.execute(
+        select(groupvars.c.id).where(groupvars.c.group_id == group_id, groupvars.c.name == name)
+    ).scalar_one_or_none()
+    return cast(int | None, value)
+
+
+def create_group_variable(connection: Connection, group_id: int, name: str, value: str) -> None:
+    """Create a group variable."""
+    connection.execute(groupvars.insert().values(group_id=group_id, name=name, value=value))
+
+
+def update_group_variable(connection: Connection, variable_id: int, value: str) -> None:
+    """Update a group variable."""
+    connection.execute(groupvars.update().where(groupvars.c.id == variable_id).values(value=value))
+
+
+def remove_group_variable(connection: Connection, group_id: int, name: str) -> None:
+    """Remove a group variable by name."""
+    connection.execute(
+        delete(groupvars).where(groupvars.c.group_id == group_id, groupvars.c.name == name)
+    )
+
+
+def query_group_vars(connection: Connection, names: tuple[str, ...]) -> dict[str, dict[str, str]]:
+    """Return group variables grouped by group."""
+    selected_groups = connection.execute(
+        select(groups.c.id, groups.c.name).order_by(groups.c.name)
+    ).all()
+    name_set = set(names)
+    data: dict[str, dict[str, str]] = {}
+    for row in selected_groups:
+        if row.name not in name_set:
+            continue
+        variables = connection.execute(
+            select(groupvars.c.name, groupvars.c.value)
+            .where(groupvars.c.group_id == row.id)
+            .order_by(groupvars.c.name)
+        ).all()
+        data[str(row.name)] = {str(var.name): str(var.value) for var in variables}
+    return data

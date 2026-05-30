@@ -388,7 +388,7 @@ cases:
         - "Dry run complete. No changes applied."
 
   - id: group-addvar-basic
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/group_addvar_spec.rb:96
     description: associates group with key/value variable
     args: [group, addvar, web, role=frontend]
@@ -402,7 +402,7 @@ cases:
       stderr: ""
 
   - id: group-listvar-ansible
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/group_listvar_spec.rb:74
     description: returns group variables in Ansible-style hostvars payload
     args: [group, listvars, web, --ansible]
@@ -415,7 +415,7 @@ cases:
       json_contains_keys: [_meta]
 
   - id: host-listvar-ansible-host-alias
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/host_listvar_spec.rb:122
     description: --host HOST is an alias for Ansible host variable lookup
     args: [--host, web01]

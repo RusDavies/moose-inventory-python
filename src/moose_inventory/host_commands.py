@@ -59,6 +59,12 @@ class HostCommands:
                 return self.addgroup(args[1:])
             if action == "rmgroup":
                 return self.rmgroup(args[1:])
+            if action == "addvar":
+                return self.addvar(args[1:])
+            if action == "rmvar":
+                return self.rmvar(args[1:])
+            if action in {"listvar", "listvars"}:
+                return self.listvars(args[1:])
         except HostCommandError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
@@ -247,6 +253,135 @@ class HostCommands:
                 print("Dry run complete. No changes applied.")
             print("  - All OK")
         print("Succeeded")
+        return 0
+
+    def addvar(self, raw_args: Sequence[str]) -> int:
+        """Add or update host variables."""
+        options = parse_relation_options(raw_args, destructive=False)
+        if len(options.names) < 2:
+            print(
+                f"ERROR: Wrong number of arguments, {len(options.names)} for 2 or more.",
+                file=sys.stderr,
+            )
+            return 1
+        host_name = options.names[0].lower()
+        variables = tuple(dict.fromkeys(options.names[1:]))
+        return self._change_vars(
+            entity_label="host",
+            entity_name=host_name,
+            variables=variables,
+            remove=False,
+            dry_run=options.dry_run,
+        )
+
+    def rmvar(self, raw_args: Sequence[str]) -> int:
+        """Remove host variables."""
+        options = parse_relation_options(raw_args, destructive=True)
+        if len(options.names) < 2:
+            print(
+                f"ERROR: Wrong number of arguments, {len(options.names)} for 2 or more.",
+                file=sys.stderr,
+            )
+            return 1
+        host_name = options.names[0].lower()
+        variables = tuple(dict.fromkeys(options.names[1:]))
+        if not options.yes and not options.dry_run:
+            print(
+                f"ERROR: host rmvar {host_name} {','.join(variables)} is destructive. "
+                "Re-run with --yes to confirm, or use --dry-run to preview.",
+                file=sys.stderr,
+            )
+            return 1
+        return self._change_vars(
+            entity_label="host",
+            entity_name=host_name,
+            variables=variables,
+            remove=True,
+            dry_run=options.dry_run,
+        )
+
+    def listvars(self, raw_args: Sequence[str]) -> int:
+        """List variables for one or more hosts."""
+        names = tuple(arg.lower() for arg in raw_args if not arg.startswith("--"))
+        if self.runtime.ansible and len(names) != 1:
+            print(
+                f"ERROR: Wrong number of arguments for Ansible mode, {len(names)} for 1.",
+                file=sys.stderr,
+            )
+            return 1
+        if not self.runtime.ansible and not names:
+            print("ERROR: Wrong number of arguments, 0 for 1 or more.", file=sys.stderr)
+            return 1
+        with self.database.connect() as connection:
+            data = query_host_vars(connection, names)
+        if self.runtime.ansible:
+            if names[0] not in data:
+                print(f"WARNING: The host {names[0]} does not exist.", file=sys.stderr)
+                dump_data({"_meta": {"hostvars": {}}}, self.runtime.output_format)
+            else:
+                payload: dict[str, Any] = dict(data[names[0]])
+                payload["_meta"] = {"hostvars": data}
+                dump_data(payload, self.runtime.output_format)
+        else:
+            dump_data(data, self.runtime.output_format)
+        return 0
+
+    def _change_vars(
+        self,
+        *,
+        entity_label: str,
+        entity_name: str,
+        variables: tuple[str, ...],
+        remove: bool,
+        dry_run: bool,
+    ) -> int:
+        action = "Remove variable(s)" if remove else "Add variables"
+        preposition = "from" if remove else "to"
+        verb = "remove" if remove else "add"
+        print(f"{action} '{','.join(variables)}' {preposition} {entity_label} '{entity_name}':")
+        print(f"  - retrieve {entity_label} '{entity_name}'...")
+        with self.database.engine.begin() as connection:
+            host_id = find_host_id(connection, entity_name)
+            if host_id is None:
+                print(
+                    "An error occurred during a transaction, any changes have been rolled back.",
+                    file=sys.stderr,
+                )
+                print(f"ERROR: The host '{entity_name}' does not exist.", file=sys.stderr)
+                return 1
+            print("    - OK")
+            for variable in variables:
+                print(f"  - {verb} variable '{variable}'...")
+                try:
+                    if remove:
+                        key, value = parse_variable_for_remove(variable)
+                    else:
+                        key, value = parse_variable(variable)
+                except HostCommandError as exc:
+                    print(
+                        "An error occurred during a transaction, "
+                        "any changes have been rolled back.",
+                        file=sys.stderr,
+                    )
+                    print(f"ERROR: {exc}", file=sys.stderr)
+                    return 1
+                if remove:
+                    if not dry_run:
+                        remove_host_variable(connection, host_id, key)
+                else:
+                    existing = find_host_variable_id(connection, host_id, key)
+                    if existing is not None and not dry_run:
+                        print("    - already exists, applying as an update...")
+                        update_host_variable(connection, int(existing), value)
+                    elif existing is not None:
+                        print("    - already exists, applying as an update...")
+                    elif not dry_run:
+                        create_host_variable(connection, host_id, key, value)
+                print("    - OK")
+            print("  - all OK")
+        if dry_run:
+            print("Dry run complete. No changes applied.")
+        print("Succeeded.")
         return 0
 
     def rmgroup(self, raw_args: Sequence[str]) -> int:
@@ -562,6 +697,68 @@ def host_payload(connection: Connection, host_id: int) -> dict[str, Any]:
     if variables:
         payload["hostvars"] = {str(row.name): row.value for row in variables}
     return payload
+
+
+def parse_variable(variable: str) -> tuple[str, str]:
+    """Parse a Ruby-compatible key=value variable."""
+    parts = variable.split("=")
+    if variable.startswith("=") or variable.endswith("=") or len(parts) != 2:
+        raise HostCommandError(f"Incorrect format in '{{{variable}}}'. Expected 'key=value'.")
+    return parts[0], parts[1]
+
+
+def parse_variable_for_remove(variable: str) -> tuple[str, str]:
+    """Parse a Ruby-compatible variable removal token."""
+    if variable.startswith("=") or variable.count("=") > 1:
+        raise HostCommandError(
+            f"Incorrect format in {{{variable}}}. Expected 'key' or 'key=value'."
+        )
+    key, _, value = variable.partition("=")
+    return key, value
+
+
+def find_host_variable_id(connection: Connection, host_id: int, name: str) -> int | None:
+    """Find a host variable id by host and name."""
+    value = connection.execute(
+        select(hostvars.c.id).where(hostvars.c.host_id == host_id, hostvars.c.name == name)
+    ).scalar_one_or_none()
+    return cast(int | None, value)
+
+
+def create_host_variable(connection: Connection, host_id: int, name: str, value: str) -> None:
+    """Create a host variable."""
+    connection.execute(hostvars.insert().values(host_id=host_id, name=name, value=value))
+
+
+def update_host_variable(connection: Connection, variable_id: int, value: str) -> None:
+    """Update a host variable."""
+    connection.execute(hostvars.update().where(hostvars.c.id == variable_id).values(value=value))
+
+
+def remove_host_variable(connection: Connection, host_id: int, name: str) -> None:
+    """Remove a host variable by name."""
+    connection.execute(
+        delete(hostvars).where(hostvars.c.host_id == host_id, hostvars.c.name == name)
+    )
+
+
+def query_host_vars(connection: Connection, names: tuple[str, ...]) -> dict[str, dict[str, str]]:
+    """Return host variables grouped by host."""
+    selected_hosts = connection.execute(
+        select(hosts.c.id, hosts.c.name).order_by(hosts.c.name)
+    ).all()
+    name_set = set(names)
+    data: dict[str, dict[str, str]] = {}
+    for row in selected_hosts:
+        if row.name not in name_set:
+            continue
+        variables = connection.execute(
+            select(hostvars.c.name, hostvars.c.value)
+            .where(hostvars.c.host_id == row.id)
+            .order_by(hostvars.c.name)
+        ).all()
+        data[str(row.name)] = {str(var.name): str(var.value) for var in variables}
+    return data
 
 
 def host_matches_filters(
