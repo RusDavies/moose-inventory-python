@@ -143,7 +143,7 @@ cases:
         - host_absent: dry-run-host
 
   - id: host-add-plan-json
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/host_add_spec.rb:109
     description: host add dry-run plan emits machine-readable JSON only
     args: [host, add, plan-host, --dry-run, --plan-format, json]
@@ -160,7 +160,7 @@ cases:
       stderr: ""
 
   - id: host-add-plan-without-dry-run
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/host_add_spec.rb:127
     description: --plan-format without --dry-run aborts before writing
     args: [host, add, plan-host-without-dry-run, --plan-format, json]

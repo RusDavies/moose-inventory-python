@@ -26,6 +26,7 @@ class HostCommandOptions:
     dry_run: bool = False
     yes: bool = False
     output_format: str | None = None
+    plan_format: str | None = None
 
 
 class HostCommandError(RuntimeError):
@@ -85,6 +86,8 @@ class HostCommands:
         if not options.names:
             print("ERROR: Wrong number of arguments, 0 for 1 or more.", file=sys.stderr)
             return 1
+        if options.plan_format:
+            return self.add_plan(options)
 
         warnings = False
         with self.database.engine.begin() as connection:
@@ -126,6 +129,36 @@ class HostCommands:
         if options.dry_run:
             print("Dry run complete. No changes applied.")
         print("Succeeded, with warnings." if warnings else "Succeeded")
+        return 0
+
+    def add_plan(self, options: HostCommandOptions) -> int:
+        """Render a machine-readable dry-run plan for host add."""
+        events: list[dict[str, Any]] = []
+        with self.database.connect() as connection:
+            for name in options.names:
+                events.append({"type": "host_started", "payload": {"name": name}})
+                if find_host_id(connection, name) is None:
+                    events.append({"type": "creating_host", "payload": {"name": name}})
+                else:
+                    events.append({"type": "host_exists", "payload": {"name": name}})
+                events.append({"type": "ok", "payload": {"indent": 4}})
+                target_groups = options.groups or (AUTOMATIC_GROUP,)
+                for group_name in target_groups:
+                    automatic = group_name == AUTOMATIC_GROUP and not options.groups
+                    event_type = "adding_automatic_group" if automatic else "adding_group"
+                    events.append(
+                        {"type": event_type, "payload": {"host": name, "group": group_name}}
+                    )
+                    events.append({"type": "ok", "payload": {"indent": 4}})
+                events.append({"type": "host_complete", "payload": {}})
+        events.append({"type": "dry_run_summary", "payload": {}})
+        plan = {
+            "command": "host add",
+            "dry_run": True,
+            "changes_applied": False,
+            "events": events,
+        }
+        dump_data(plan, options.plan_format or "json")
         return 0
 
     def list_hosts(self, raw_args: Sequence[str]) -> int:
@@ -550,6 +583,7 @@ def parse_host_add_options(raw_args: Sequence[str]) -> HostCommandOptions:
     names: list[str] = []
     requested_groups: list[str] = []
     dry_run = False
+    plan_format: str | None = None
     index = 0
     while index < len(raw_args):
         arg = raw_args[index]
@@ -564,11 +598,16 @@ def parse_host_add_options(raw_args: Sequence[str]) -> HostCommandOptions:
         elif arg == "--plan-format":
             if not dry_run:
                 raise HostCommandError("--plan-format requires --dry-run.")
+            if index + 1 >= len(raw_args):
+                raise HostCommandError("Expected a value after --plan-format")
+            plan_format = raw_args[index + 1]
             index += 2
         else:
             names.append(arg)
             index += 1
-    return HostCommandOptions(tuple(names), tuple(requested_groups), dry_run=dry_run)
+    return HostCommandOptions(
+        tuple(names), tuple(requested_groups), dry_run=dry_run, plan_format=plan_format
+    )
 
 
 def parse_host_rm_options(raw_args: Sequence[str]) -> HostCommandOptions:
