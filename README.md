@@ -17,6 +17,10 @@ python -m pip install 'moose-inventory[postgresql]'
 
 See `docs/backend-adapters.md` for config examples and adapter smoke-test coverage.
 
+## Release operations
+
+See `docs/release.md` for PyPI publication, ownership, artifact integrity, vulnerability intake, and release evidence expectations.
+
 ## Development commands
 
 Install development dependencies first:
