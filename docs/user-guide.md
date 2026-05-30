@@ -63,6 +63,13 @@ moose-inventory --config ./config.yml host rm web01 --dry-run
 moose-inventory --config ./config.yml host rm web01 --yes
 ```
 
+Mutating host/group commands support non-mutating dry runs. Add `--plan-format json`, `--plan-format yaml`, or `--plan-format pjson` to emit a machine-readable plan envelope instead of human preview text:
+
+```bash
+moose-inventory --config ./config.yml group add web --dry-run --plan-format json
+moose-inventory --config ./config.yml host rm web01 --dry-run --plan-format yaml
+```
+
 ## Verify inventory health
 
 Run doctor before and after migration work:

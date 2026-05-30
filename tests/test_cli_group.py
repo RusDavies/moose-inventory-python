@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -84,6 +85,40 @@ def test_group_rm_requires_confirmation(tmp_path: Path, capsys: pytest.CaptureFi
         "ERROR: group rm web is destructive. Re-run with --yes to confirm, "
         "or use --dry-run to preview.\n"
     )
+
+
+def test_group_add_plan_format_is_machine_readable_and_non_mutating(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_config(tmp_path)
+
+    assert (
+        main(
+            [
+                "--config",
+                str(config),
+                "group",
+                "add",
+                "web",
+                "--dry-run",
+                "--plan-format",
+                "json",
+            ]
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    plan = json.loads(captured.out)
+    assert plan["command"] == "group add"
+    assert plan["dry_run"] is True
+    assert plan["changes_applied"] is False
+    assert plan["exit_code"] == 0
+    assert "Dry run complete. No changes applied." in plan["stdout"]
+    assert captured.err == ""
+
+    assert main(["--config", str(config), "group", "get", "web"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "{}\n"
 
 
 def test_group_add_with_missing_host_warns_and_associates(

@@ -36,6 +36,7 @@ from moose_inventory.host_commands import (
     parse_variable,
     parse_variable_for_remove,
     remove_host_group,
+    render_dry_run_plan,
     split_csv,
 )
 
@@ -67,37 +68,45 @@ class GroupCommands:
 
         action = args[0]
         try:
-            if action == "add":
-                return self.add(args[1:])
-            if action == "list":
-                return self.list_groups(args[1:])
-            if action == "get":
-                return self.get(args[1:])
-            if action == "rm":
-                return self.rm(args[1:])
-            if action == "addhost":
-                return self.addhost(args[1:])
-            if action == "rmhost":
-                return self.rmhost(args[1:])
-            if action == "addchild":
-                return self.addchild(args[1:])
-            if action == "rmchild":
-                return self.rmchild(args[1:])
-            if action == "addvar":
-                return self.addvar(args[1:])
-            if action == "rmvar":
-                return self.rmvar(args[1:])
-            if action in {"listvar", "listvars"}:
-                return self.listvars(args[1:])
-            if action == "addtag":
-                return self.addtag(args[1:])
-            if action == "rmtag":
-                return self.rmtag(args[1:])
-            if action == "listtags":
-                return self.listtags(args[1:])
+            if "--plan-format" in args[1:]:
+                return render_dry_run_plan(
+                    f"group {action}", args[1:], lambda stripped: self._run_action(action, stripped)
+                )
+            return self._run_action(action, args[1:])
         except HostCommandError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
+
+    def _run_action(self, action: str, raw_args: Sequence[str]) -> int:
+        """Run a group action without top-level plan interception."""
+        if action == "add":
+            return self.add(raw_args)
+        if action == "list":
+            return self.list_groups(raw_args)
+        if action == "get":
+            return self.get(raw_args)
+        if action == "rm":
+            return self.rm(raw_args)
+        if action == "addhost":
+            return self.addhost(raw_args)
+        if action == "rmhost":
+            return self.rmhost(raw_args)
+        if action == "addchild":
+            return self.addchild(raw_args)
+        if action == "rmchild":
+            return self.rmchild(raw_args)
+        if action == "addvar":
+            return self.addvar(raw_args)
+        if action == "rmvar":
+            return self.rmvar(raw_args)
+        if action in {"listvar", "listvars"}:
+            return self.listvars(raw_args)
+        if action == "addtag":
+            return self.addtag(raw_args)
+        if action == "rmtag":
+            return self.rmtag(raw_args)
+        if action == "listtags":
+            return self.listtags(raw_args)
 
         print(f"ERROR: group action '{action}' is not implemented.", file=sys.stderr)
         return 1
@@ -504,7 +513,11 @@ class GroupCommands:
             if group_id is None:
                 print(f"ERROR: The group '{group_name}' does not exist.", file=sys.stderr)
                 return 1
-            changed = add_group_tags(connection, group_id, tag_names)
+            changed = (
+                tag_names if options.dry_run else add_group_tags(connection, group_id, tag_names)
+            )
+        if options.dry_run:
+            print("Dry run complete. No changes applied.")
         print(f"Added group tag(s) to '{group_name}': {', '.join(changed)}.")
         return 0
 
@@ -519,10 +532,10 @@ class GroupCommands:
             return 1
         group_name = options.names[0].lower()
         tag_names = normalize_tags(options.names[1:])
-        if not options.yes:
+        if not options.yes and not options.dry_run:
             print(
                 f"ERROR: group rmtag {group_name} {','.join(tag_names)} is destructive. "
-                "Re-run with --yes to confirm.",
+                "Re-run with --yes to confirm, or use --dry-run to preview.",
                 file=sys.stderr,
             )
             return 1
@@ -531,7 +544,11 @@ class GroupCommands:
             if group_id is None:
                 print(f"ERROR: The group '{group_name}' does not exist.", file=sys.stderr)
                 return 1
-            changed = remove_group_tags(connection, group_id, tag_names)
+            changed = (
+                tag_names if options.dry_run else remove_group_tags(connection, group_id, tag_names)
+            )
+        if options.dry_run:
+            print("Dry run complete. No changes applied.")
         print(f"Removed group tag(s) from '{group_name}': {', '.join(changed)}.")
         return 0
 
