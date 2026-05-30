@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from moose_inventory import __version__
@@ -27,9 +29,25 @@ def test_help_command_mentions_parity_baseline(capsys: pytest.CaptureFixture[str
     assert captured.err == ""
 
 
-def test_unimplemented_command_fails_predictably(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["host", "list"]) == 1
+def test_unimplemented_command_fails_after_runtime_parsing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = tmp_path / "config.yml"
+    config.write_text(
+        "general:\n  defaultenv: dev\ndev:\n  db:\n    adapter: sqlite3\n    file: ./dev.db\n",
+        encoding="utf-8",
+    )
+
+    assert main(["--config", str(config), "host", "list"]) == 1
 
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "not implemented" in captured.err
+    assert "command 'host' is not implemented" in captured.err
+
+
+def test_config_error_is_reported(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["--config"]) == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "ERROR: Expected a value after --config\n"
