@@ -41,15 +41,18 @@ def test_group_addchild_and_rmchild_flow(
     assert captured.err == ""
 
 
-def test_group_addchild_rejects_cycle(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_group_addchild_allows_ruby_compatible_cycle(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     config = write_config(tmp_path)
     assert main(["--config", str(config), "group", "add", "parent", "child"]) == 0
     assert main(["--config", str(config), "group", "addchild", "parent", "child"]) == 0
     capsys.readouterr()
 
-    assert main(["--config", str(config), "group", "addchild", "child", "parent"]) == 1
+    assert main(["--config", str(config), "group", "addchild", "child", "parent"]) == 0
     captured = capsys.readouterr()
-    assert "ERROR: circular group relationship rejected: child -> parent.\n" in captured.err
+    assert "Succeeded.\n" in captured.out
+    assert captured.err == ""
 
 
 def test_group_rmchild_delete_orphans(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

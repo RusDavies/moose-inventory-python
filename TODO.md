@@ -4,7 +4,6 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 
 ## Open
 
-- [ ] Reconcile Ruby/Python child-group cycle behavior: Python now rejects cycles, while the current Ruby CLI permits `child -> parent`; decide whether to patch Ruby, document a compatibility waiver, or relax Python before release.
 - [ ] Port dry-run and machine-readable plan output for all mutating command families, including `--plan-format` validation.
 - [ ] Port snapshot export/import/preview behavior, preserving additive import semantics and snapshot version/shape.
 - [ ] Port inventory `doctor` checks and formatted report output.
@@ -18,6 +17,7 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 
 ## Done
 
+- [x] Reconcile Ruby/Python child-group cycle behavior: Python now permits cycles to match the current Ruby CLI, with the compatibility decision documented.
 - [x] Add development and verification commands for tests, lint, formatting, type checking, coverage, package build, and package metadata validation.
 - [x] Port metadata tag commands: `addtag`, `rmtag`, and `listtags`, preserving lowercase/strip/dedupe normalization.
 - [x] Port child-group relationship commands: `group addchild` and `group rmchild`, including invalid/circular hierarchy handling and `--delete-orphans` behavior.
