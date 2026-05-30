@@ -20,6 +20,7 @@ from sqlalchemy import (
     select,
 )
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine.url import URL
 from sqlalchemy.exc import NoSuchTableError
 
 from moose_inventory.config import ConfigError, RuntimeOptions, db_settings
@@ -248,17 +249,29 @@ def init_sqlite(settings: dict[str, Any]) -> Database:
 def init_mysql(settings: dict[str, Any]) -> Database:
     """Create a MySQL/MariaDB database handle."""
     ensure_required_config_keys(settings, ("host", "database", "user"), "mysql")
-    password = database_password(settings, "mysql")
-    url = f"mysql+pymysql://{settings['user']}:{password}@{settings['host']}/{settings['database']}"
+    url = network_database_url(settings, adapter="mysql", drivername="mysql+pymysql")
     return Database(engine=create_engine(url, future=True), adapter="mysql")
 
 
 def init_postgresql(settings: dict[str, Any]) -> Database:
     """Create a PostgreSQL database handle."""
     ensure_required_config_keys(settings, ("host", "database", "user"), "postgresql")
-    password = database_password(settings, "postgresql")
-    url = f"postgresql+psycopg://{settings['user']}:{password}@{settings['host']}/{settings['database']}"
+    url = network_database_url(
+        settings, adapter="postgresql", drivername="postgresql+psycopg"
+    )
     return Database(engine=create_engine(url, future=True), adapter="postgresql")
+
+
+def network_database_url(settings: dict[str, Any], *, adapter: str, drivername: str) -> URL:
+    """Build a SQLAlchemy URL for a network database without opening a connection."""
+    password = database_password(settings, adapter)
+    return URL.create(
+        drivername=drivername,
+        username=str(settings["user"]),
+        password=password,
+        host=str(settings["host"]),
+        database=str(settings["database"]),
+    )
 
 
 def ensure_required_config_keys(

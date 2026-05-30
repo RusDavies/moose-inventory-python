@@ -5,13 +5,13 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 ## Open
 
 - [ ] Port dry-run and machine-readable plan output for all mutating command families, including `--plan-format` validation.
-- [ ] Add MySQL/MariaDB and PostgreSQL backend adapter smoke coverage and document required client dependencies.
 - [ ] Add user documentation for installing the Python CLI, configuring backends, migrating from Ruby, verifying with `doctor`, exporting snapshots before switching, and using Ansible.
 - [ ] Add package/release documentation for PyPI publication, release ownership, artifact integrity/provenance, and vulnerability intake/security patch process.
 - [ ] Run full parity/release gate and record evidence before any public package release.
 
 ## Done
 
+- [x] Add MySQL/MariaDB and PostgreSQL backend adapter smoke coverage and document required client dependencies.
 - [x] Port the read-only console for human browsing of hosts, groups, tags, and recent audit events.
 - [x] Port Ansible dynamic inventory behavior for `--list`, `--host HOSTNAME`, and `--ansible` mode.
 - [x] Port append-only audit recording and `audit list` output.
