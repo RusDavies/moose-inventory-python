@@ -179,6 +179,18 @@ def test_tag_command_flows_match_ruby(tmp_path: Path, flow: list[tuple[str, ...]
         assert python_result == ruby_result
 
 
+def test_audit_flow_matches_ruby(tmp_path: Path) -> None:
+    run = make_compatibility_run(tmp_path)
+    for args in [("audit", "list"), ("host", "add", "app01"), ("audit", "list")]:
+        ruby_result, python_result = run.compare(args)
+        if args == ("audit", "list") and "host add" in python_result.stdout:
+            assert python_result.returncode == ruby_result.returncode
+            assert python_result.stderr == ruby_result.stderr
+            assert python_result.stdout.split(" ", 2)[2] == ruby_result.stdout.split(" ", 2)[2]
+        else:
+            assert python_result == ruby_result
+
+
 def test_inventory_doctor_output_matches_ruby(tmp_path: Path) -> None:
     run = make_compatibility_run(tmp_path)
     ruby_result, python_result = run.compare(("doctor",))

@@ -8,14 +8,15 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import cast
 
 import yaml
 
+from moose_inventory.audit import infer_audit_metadata, list_audit_events, record_audit_event
 from moose_inventory.config import ConfigError, RuntimeOptions, parse_runtime_options
-from moose_inventory.db import DatabaseError, backup_sqlite, database_from_runtime
+from moose_inventory.db import Database, DatabaseError, backup_sqlite, database_from_runtime
 from moose_inventory.doctor import inventory_doctor
 from moose_inventory.group_commands import GroupCommands
 from moose_inventory.host_commands import HostCommands
@@ -41,6 +42,7 @@ Implemented commands:
   export        Export a canonical inventory snapshot
   import        Import and validate an inventory snapshot
   doctor        Run read-only inventory health checks
+  audit         Inspect append-only inventory change history
 
 Compatibility target:
   See docs/compatibility/ruby-parity-baseline.md
@@ -79,21 +81,79 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command in {"database", "db"}:
         return run_database_command(runtime)
     if command == "host":
-        return HostCommands(database_from_runtime(runtime), runtime).run()
+        database = database_from_runtime(runtime)
+        return run_with_audit(runtime, database, HostCommands(database, runtime).run)
     if command == "group":
-        return GroupCommands(database_from_runtime(runtime), runtime).run()
+        database = database_from_runtime(runtime)
+        return run_with_audit(runtime, database, GroupCommands(database, runtime).run)
     if command == "export":
         return run_export_command(runtime)
     if command == "import":
         return run_import_command(runtime)
     if command == "doctor":
         return run_doctor_command(runtime)
+    if command == "audit":
+        return run_audit_command(runtime)
 
     print(
         f"ERROR: command '{command}' is not implemented in the Python port skeleton yet.",
         file=sys.stderr,
     )
     return 1
+
+
+def run_with_audit(runtime: RuntimeOptions, database: Database, action: Callable[[], int]) -> int:
+    """Run a command and append audit metadata on successful mutations."""
+    result = action()
+    if result == 0:
+        metadata = infer_audit_metadata(runtime.argv)
+        if metadata is not None:
+            record_audit_event(database, metadata)
+    return result
+
+
+def run_audit_command(runtime: RuntimeOptions) -> int:
+    """Dispatch audit commands."""
+    args = list(runtime.argv[1:])
+    if not args or args[0] in {"help", "--help", "-h"}:
+        print("Usage: moose-inventory audit list [--limit N] [--format yaml|json|pjson]")
+        return 0
+    if args[0] != "list":
+        print(f"ERROR: audit action '{args[0]}' is not implemented.", file=sys.stderr)
+        return 1
+    limit = 20
+    output_format: str | None = None
+    index = 1
+    while index < len(args):
+        arg = args[index]
+        if arg == "--limit":
+            if index + 1 >= len(args):
+                print("ERROR: Expected a value after --limit", file=sys.stderr)
+                return 1
+            limit = int(args[index + 1])
+            index += 1
+        elif arg == "--format":
+            if index + 1 >= len(args):
+                print("ERROR: Expected a value after --format", file=sys.stderr)
+                return 1
+            output_format = args[index + 1]
+            index += 1
+        else:
+            print(f"ERROR: Unknown audit list option '{arg}'", file=sys.stderr)
+            return 1
+        index += 1
+    events = list_audit_events(database_from_runtime(runtime), limit=limit)
+    if output_format:
+        print(serialize_data(events, output_format))
+    elif not events:
+        print("No audit events recorded.")
+    else:
+        for event in events:
+            print(
+                f"{event['id']} {event['created_at']} {event['command']} "
+                f"{event['entity_type']}={event['entity_name']} action={event['action']}"
+            )
+    return 0
 
 
 def run_doctor_command(runtime: RuntimeOptions) -> int:
@@ -175,7 +235,11 @@ def run_import_command(runtime: RuntimeOptions) -> int:
                 preview_snapshot(database_from_runtime(runtime), snapshot), preview_format
             )
             return 0
-        result = import_snapshot(database_from_runtime(runtime), snapshot)
+        database = database_from_runtime(runtime)
+        result = import_snapshot(database, snapshot)
+        metadata = infer_audit_metadata(runtime.argv)
+        if metadata is not None:
+            record_audit_event(database, metadata)
     except FileNotFoundError:
         print(f"ERROR: The inventory snapshot '{file_name}' does not exist.", file=sys.stderr)
         return 1
