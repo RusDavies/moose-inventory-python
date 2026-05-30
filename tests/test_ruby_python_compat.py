@@ -155,6 +155,17 @@ def test_variable_command_flows_match_ruby(tmp_path: Path, flow: list[tuple[str,
         assert python_result == ruby_result
 
 
+def test_ansible_list_alias_matches_ruby(tmp_path: Path) -> None:
+    run = make_compatibility_run(tmp_path)
+    for args in [
+        ("group", "add", "web"),
+        ("host", "add", "web01", "--groups", "web"),
+        ("--list",),
+    ]:
+        ruby_result, python_result = run.compare(args)
+        assert python_result == ruby_result
+
+
 @pytest.mark.parametrize(
     "flow",
     [

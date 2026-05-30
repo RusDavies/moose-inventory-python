@@ -328,7 +328,7 @@ cases:
       stderr: ""
 
   - id: group-list-ansible-alias
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/group_list_spec.rb:57
     description: --list is an alias for Ansible group list mode
     args: [--list]
