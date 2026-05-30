@@ -16,6 +16,7 @@ import yaml
 
 from moose_inventory.audit import infer_audit_metadata, list_audit_events, record_audit_event
 from moose_inventory.config import ConfigError, RuntimeOptions, parse_runtime_options
+from moose_inventory.console import run_console
 from moose_inventory.db import Database, DatabaseError, backup_sqlite, database_from_runtime
 from moose_inventory.doctor import inventory_doctor
 from moose_inventory.group_commands import GroupCommands
@@ -43,6 +44,7 @@ Implemented commands:
   import        Import and validate an inventory snapshot
   doctor        Run read-only inventory health checks
   audit         Inspect append-only inventory change history
+  console       Open a small read-only inventory browsing console
 
 Compatibility target:
   See docs/compatibility/ruby-parity-baseline.md
@@ -94,6 +96,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_doctor_command(runtime)
     if command == "audit":
         return run_audit_command(runtime)
+    if command == "console":
+        return run_console(database_from_runtime(runtime))
 
     print(
         f"ERROR: command '{command}' is not implemented in the Python port skeleton yet.",

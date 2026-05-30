@@ -155,6 +155,12 @@ def test_variable_command_flows_match_ruby(tmp_path: Path, flow: list[tuple[str,
         assert python_result == ruby_result
 
 
+def test_console_quit_matches_ruby(tmp_path: Path) -> None:
+    run = make_compatibility_run(tmp_path)
+    ruby_result, python_result = run.compare(("console",), stdin="quit\n")
+    assert python_result == ruby_result
+
+
 def test_ansible_list_alias_matches_ruby(tmp_path: Path) -> None:
     run = make_compatibility_run(tmp_path)
     for args in [
