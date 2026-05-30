@@ -16,6 +16,7 @@ import yaml
 
 from moose_inventory.config import ConfigError, RuntimeOptions, parse_runtime_options
 from moose_inventory.db import DatabaseError, backup_sqlite, database_from_runtime
+from moose_inventory.doctor import inventory_doctor
 from moose_inventory.group_commands import GroupCommands
 from moose_inventory.host_commands import HostCommands
 from moose_inventory.snapshot import (
@@ -39,6 +40,7 @@ Implemented commands:
   group         Manipulate groups in the inventory
   export        Export a canonical inventory snapshot
   import        Import and validate an inventory snapshot
+  doctor        Run read-only inventory health checks
 
 Compatibility target:
   See docs/compatibility/ruby-parity-baseline.md
@@ -84,12 +86,43 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_export_command(runtime)
     if command == "import":
         return run_import_command(runtime)
+    if command == "doctor":
+        return run_doctor_command(runtime)
 
     print(
         f"ERROR: command '{command}' is not implemented in the Python port skeleton yet.",
         file=sys.stderr,
     )
     return 1
+
+
+def run_doctor_command(runtime: RuntimeOptions) -> int:
+    """Run inventory doctor checks."""
+    args = list(runtime.argv[1:])
+    output_format: str | None = None
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--format":
+            if index + 1 >= len(args):
+                print("ERROR: Expected a value after --format", file=sys.stderr)
+                return 1
+            output_format = args[index + 1]
+            index += 1
+        else:
+            print(f"ERROR: Unknown doctor option '{arg}'", file=sys.stderr)
+            return 1
+        index += 1
+    report = inventory_doctor(database_from_runtime(runtime), runtime)
+    if output_format:
+        print(serialize_data(report, output_format))
+    elif report["ok"]:
+        print("Inventory doctor found no issues.")
+    else:
+        print(f"Inventory doctor found {report['issue_count']} issue(s):")
+        for entry in cast(list[Mapping[str, object]], report["issues"]):
+            print(f"- [{entry['severity']}] {entry['id']}: {entry['message']}")
+    return 0 if report["ok"] else 1
 
 
 def run_export_command(runtime: RuntimeOptions) -> int:

@@ -481,7 +481,7 @@ cases:
         - "Snapshot import preview. No changes applied.\n"
 
   - id: inventory-doctor-human-ok
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/application_doctor_spec.rb:15
     description: inventory doctor prints human success report when no issues are found
     args: [doctor]
