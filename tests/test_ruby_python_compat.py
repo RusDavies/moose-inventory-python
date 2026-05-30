@@ -60,6 +60,39 @@ def test_core_host_stateful_flow_matches_ruby(tmp_path: Path) -> None:
         assert python_result == ruby_result
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("group", "add", "web"),
+        ("group", "add", "dry-run-group", "--dry-run"),
+        ("group", "get", "missing"),
+        ("group", "list"),
+        ("group", "add", "ungrouped"),
+    ],
+)
+def test_core_group_single_command_output_matches_ruby(
+    tmp_path: Path, args: tuple[str, ...]
+) -> None:
+    run = make_compatibility_run(tmp_path)
+
+    ruby_result, python_result = run.compare(args)
+
+    assert python_result == ruby_result
+
+
+def test_core_group_stateful_flow_matches_ruby(tmp_path: Path) -> None:
+    run = make_compatibility_run(tmp_path)
+    for args in [
+        ("group", "add", "web"),
+        ("group", "get", "web"),
+        ("group", "list"),
+        ("group", "rm", "web", "--yes"),
+        ("group", "get", "web"),
+    ]:
+        ruby_result, python_result = run.compare(args)
+        assert python_result == ruby_result
+
+
 def test_database_backup_output_and_artifact_match_ruby(tmp_path: Path) -> None:
     run = make_compatibility_run(tmp_path)
 

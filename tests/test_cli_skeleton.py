@@ -38,11 +38,11 @@ def test_unimplemented_command_fails_after_runtime_parsing(
         encoding="utf-8",
     )
 
-    assert main(["--config", str(config), "group", "list"]) == 1
+    assert main(["--config", str(config), "audit", "list"]) == 1
 
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "command 'group' is not implemented" in captured.err
+    assert "command 'audit' is not implemented" in captured.err
 
 
 def test_config_error_is_reported(capsys: pytest.CaptureFixture[str]) -> None:
