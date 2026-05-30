@@ -505,15 +505,16 @@ cases:
       json_contains_keys: [ok, issue_count, issues]
 
   - id: audit-list-empty
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/audit_spec.rb:16
     description: audit list starts with an empty audit log
-    args: [audit, list, --format, json]
+    args: [audit, list]
     setup: []
     compare:
-      mode: json_structural
+      mode: exact
     expected:
-      json: []
+      stdout: "No audit events recorded.\n"
+      stderr: ""
 
   - id: audit-records-host-add
     status: pending_python_port

@@ -5,7 +5,6 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 ## Open
 
 - [ ] Port dry-run and machine-readable plan output for all mutating command families, including `--plan-format` validation.
-- [ ] Port append-only audit recording and `audit list` output.
 - [ ] Port Ansible dynamic inventory behavior for `--list`, `--host HOSTNAME`, and `--ansible` mode.
 - [ ] Port the read-only console or explicitly document any compatibility decision before deferring it.
 - [ ] Add MySQL/MariaDB and PostgreSQL backend adapter smoke coverage and document required client dependencies.
@@ -15,6 +14,7 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 
 ## Done
 
+- [x] Port append-only audit recording and `audit list` output.
 - [x] Port inventory `doctor` checks and formatted report output.
 - [x] Port snapshot export/import/preview behavior, preserving additive import semantics and snapshot version/shape.
 - [x] Reconcile Ruby/Python child-group cycle behavior: Python now permits cycles to match the current Ruby CLI, with the compatibility decision documented.
