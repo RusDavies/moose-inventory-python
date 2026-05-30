@@ -4,12 +4,12 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 
 ## Open
 
-- [ ] Write Ruby parity baseline documentation covering CLI command matrix, global flags, config discovery, DB schema/version, output formats, snapshot shapes, dry-run plan events, and Ansible compatibility.
 - [ ] Set up Python CLI package skeleton with `pyproject.toml`, `moose_inventory` package, and `moose-inventory` console entry point.
 - [ ] Add development and verification commands for tests, lint, formatting, type checking, coverage, package build, and package metadata validation.
 - [ ] Implement config discovery and runtime option parsing compatible with the Ruby CLI (`--config`, `--env`, `--format`, `--ansible`, `--trace`, `--list`, `--host`).
 - [ ] Implement database schema and migration layer preserving Ruby schema version 4, table names, columns, indexes, and future-schema refusal.
 - [ ] Build Ruby-vs-Python CLI compatibility harness using disposable SQLite databases and golden/structural output comparisons.
+- [ ] Extract command-level golden cases from Ruby specs into a Python parity-test manifest.
 - [ ] Port database lifecycle commands: `db status`, `db doctor`, `db migrate`, `db backup FILE`, and `database` alias.
 - [ ] Port core host commands: `host add`, `host list`, `host get`, and `host rm` with compatibility tests.
 - [ ] Port core group commands: `group add`, `group list`, `group get`, and `group rm` with compatibility tests.
@@ -30,4 +30,5 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 
 ## Done
 
+- [x] Write Ruby parity baseline documentation covering CLI command matrix, global flags, config discovery, DB schema/version, output formats, snapshot shapes, dry-run plan events, and Ansible compatibility. See `docs/compatibility/ruby-parity-baseline.md`.
 - [x] Record project tailoring decision: Class 4 + Software CLI Package / Command Package, with Ruby `projects/moose-inventory` as the reference implementation. See `docs/process/tailoring-decision.md`.
