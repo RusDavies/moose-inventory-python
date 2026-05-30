@@ -28,6 +28,38 @@ def test_database_lifecycle_output_matches_ruby(tmp_path: Path, args: tuple[str,
     assert python_result == ruby_result
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("host", "add", "web01"),
+        ("host", "add", "dry-run-host", "--dry-run"),
+        ("host", "get", "missing"),
+        ("host", "list"),
+    ],
+)
+def test_core_host_single_command_output_matches_ruby(
+    tmp_path: Path, args: tuple[str, ...]
+) -> None:
+    run = make_compatibility_run(tmp_path)
+
+    ruby_result, python_result = run.compare(args)
+
+    assert python_result == ruby_result
+
+
+def test_core_host_stateful_flow_matches_ruby(tmp_path: Path) -> None:
+    run = make_compatibility_run(tmp_path)
+    for args in [
+        ("host", "add", "web01"),
+        ("host", "get", "web01"),
+        ("host", "list"),
+        ("host", "rm", "web01", "--yes"),
+        ("host", "get", "web01"),
+    ]:
+        ruby_result, python_result = run.compare(args)
+        assert python_result == ruby_result
+
+
 def test_database_backup_output_and_artifact_match_ruby(tmp_path: Path) -> None:
     run = make_compatibility_run(tmp_path)
 

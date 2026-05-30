@@ -13,6 +13,7 @@ from typing import cast
 
 from moose_inventory.config import ConfigError, RuntimeOptions, parse_runtime_options
 from moose_inventory.db import DatabaseError, backup_sqlite, database_from_runtime
+from moose_inventory.host_commands import HostCommands
 from moose_inventory.version import __version__
 
 USAGE = """Usage: moose-inventory [GLOBAL FLAGS] COMMAND [ARGS]
@@ -24,6 +25,7 @@ Implemented commands:
   help          Show this help
   database      Inspect and manage database lifecycle state
   db            Alias for database
+  host          Manipulate hosts in the inventory
 
 Compatibility target:
   See docs/compatibility/ruby-parity-baseline.md
@@ -61,6 +63,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     command = runtime.argv[0]
     if command in {"database", "db"}:
         return run_database_command(runtime)
+    if command == "host":
+        return HostCommands(database_from_runtime(runtime), runtime).run()
 
     print(
         f"ERROR: command '{command}' is not implemented in the Python port skeleton yet.",
