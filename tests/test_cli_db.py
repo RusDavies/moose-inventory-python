@@ -21,7 +21,7 @@ def write_config(tmp_path: Path, db_path: Path) -> Path:
     return config
 
 
-def test_database_status_reports_missing_unmigrated_schema(
+def test_database_status_reports_auto_migrated_schema(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     config = write_config(tmp_path, tmp_path / "inventory.db")
@@ -30,9 +30,9 @@ def test_database_status_reports_missing_unmigrated_schema(
 
     captured = capsys.readouterr()
     assert "Adapter: sqlite3\n" in captured.out
-    assert "Schema version: unknown\n" in captured.out
+    assert "Schema version: 4\n" in captured.out
     assert "Expected schema version: 4\n" in captured.out
-    assert "- hosts: missing\n" in captured.out
+    assert "- hosts: present\n" in captured.out
     assert captured.err == ""
 
 
@@ -51,20 +51,6 @@ def test_db_alias_migrate_creates_schema(
     captured = capsys.readouterr()
     assert "Schema version: 4\n" in captured.out
     assert "- groups_tags: present\n" in captured.out
-
-
-def test_database_doctor_fails_before_migration(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    config = write_config(tmp_path, tmp_path / "inventory.db")
-
-    assert main(["--config", str(config), "database", "doctor"]) == 1
-
-    captured = capsys.readouterr()
-    assert "Database doctor found issue(s):\n" in captured.out
-    assert "- Missing tables:" in captured.out
-    assert "- Schema version is None; expected 4.\n" in captured.out
-    assert captured.err == ""
 
 
 def test_database_doctor_passes_after_migration(
