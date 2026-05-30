@@ -123,6 +123,42 @@ def test_association_command_flows_match_ruby(
         assert python_result == ruby_result
 
 
+@pytest.mark.parametrize(
+    "flow",
+    [
+        [
+            ("host", "add", "web01"),
+            ("host", "addvar", "web01", "os=fedora"),
+            ("host", "listvars", "web01"),
+            ("host", "rmvar", "web01", "os", "--yes"),
+        ],
+        [
+            ("group", "add", "web"),
+            ("group", "addvar", "web", "role=frontend"),
+            ("group", "listvars", "web"),
+            ("group", "rmvar", "web", "role", "--yes"),
+        ],
+        [
+            ("host", "add", "web01"),
+            ("host", "addvar", "web01", "os=fedora"),
+            ("--host", "web01"),
+        ],
+        [
+            ("group", "add", "web"),
+            ("group", "addvar", "web", "role=frontend"),
+            ("--ansible", "group", "listvars", "web"),
+        ],
+    ],
+)
+def test_variable_command_flows_match_ruby(
+    tmp_path: Path, flow: list[tuple[str, ...]]
+) -> None:
+    run = make_compatibility_run(tmp_path)
+    for args in flow:
+        ruby_result, python_result = run.compare(args)
+        assert python_result == ruby_result
+
+
 def test_database_backup_output_and_artifact_match_ruby(tmp_path: Path) -> None:
     run = make_compatibility_run(tmp_path)
 
