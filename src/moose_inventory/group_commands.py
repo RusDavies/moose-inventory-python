@@ -10,7 +10,16 @@ from typing import Any, cast
 from sqlalchemy import Connection, delete, select
 
 from moose_inventory.config import RuntimeOptions
-from moose_inventory.db import Database, groups, groups_groups, groups_hosts, groupvars, hosts
+from moose_inventory.db import (
+    Database,
+    groups,
+    groups_groups,
+    groups_hosts,
+    groups_tags,
+    groupvars,
+    hosts,
+    tags,
+)
 from moose_inventory.host_commands import (
     AUTOMATIC_GROUP,
     HostCommandError,
@@ -19,8 +28,11 @@ from moose_inventory.host_commands import (
     ensure_host_group,
     find_group_id,
     find_host_id,
+    find_or_create_tag,
     host_group_exists,
     host_has_any_group,
+    normalize_tags,
+    parse_tag_options,
     parse_variable,
     parse_variable_for_remove,
     remove_host_group,
@@ -77,6 +89,12 @@ class GroupCommands:
                 return self.rmvar(args[1:])
             if action in {"listvar", "listvars"}:
                 return self.listvars(args[1:])
+            if action == "addtag":
+                return self.addtag(args[1:])
+            if action == "rmtag":
+                return self.rmtag(args[1:])
+            if action == "listtags":
+                return self.listtags(args[1:])
         except HostCommandError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
@@ -482,6 +500,78 @@ class GroupCommands:
         if dry_run:
             print("Dry run complete. No changes applied.")
         print("Succeeded.")
+        return 0
+
+    def addtag(self, raw_args: Sequence[str]) -> int:
+        """Add metadata tags to a group."""
+        options = parse_tag_options(raw_args, destructive=False)
+        if len(options.names) < 2:
+            print(
+                f"ERROR: Wrong number of arguments, {len(options.names)} for 2 or more.",
+                file=sys.stderr,
+            )
+            return 1
+        group_name = options.names[0].lower()
+        tag_names = normalize_tags(options.names[1:])
+        with self.database.engine.begin() as connection:
+            group_id = find_group_id(connection, group_name)
+            if group_id is None:
+                print(f"ERROR: The group '{group_name}' does not exist.", file=sys.stderr)
+                return 1
+            changed = add_group_tags(connection, group_id, tag_names)
+        print(f"Added group tag(s) to '{group_name}': {', '.join(changed)}.")
+        return 0
+
+    def rmtag(self, raw_args: Sequence[str]) -> int:
+        """Remove metadata tags from a group."""
+        options = parse_tag_options(raw_args, destructive=True)
+        if len(options.names) < 2:
+            print(
+                f"ERROR: Wrong number of arguments, {len(options.names)} for 2 or more.",
+                file=sys.stderr,
+            )
+            return 1
+        group_name = options.names[0].lower()
+        tag_names = normalize_tags(options.names[1:])
+        if not options.yes:
+            print(
+                f"ERROR: group rmtag {group_name} {','.join(tag_names)} is destructive. "
+                "Re-run with --yes to confirm.",
+                file=sys.stderr,
+            )
+            return 1
+        with self.database.engine.begin() as connection:
+            group_id = find_group_id(connection, group_name)
+            if group_id is None:
+                print(f"ERROR: The group '{group_name}' does not exist.", file=sys.stderr)
+                return 1
+            changed = remove_group_tags(connection, group_id, tag_names)
+        print(f"Removed group tag(s) from '{group_name}': {', '.join(changed)}.")
+        return 0
+
+    def listtags(self, raw_args: Sequence[str]) -> int:
+        """List metadata tags for a group."""
+        options = parse_tag_options(raw_args, destructive=False, allow_format=True)
+        if len(options.names) != 1:
+            print(
+                f"ERROR: Wrong number of arguments, {len(options.names)} for 1.",
+                file=sys.stderr,
+            )
+            return 1
+        group_name = options.names[0].lower()
+        with self.database.connect() as connection:
+            group_id = find_group_id(connection, group_name)
+            if group_id is None:
+                print(f"ERROR: The group '{group_name}' does not exist.", file=sys.stderr)
+                return 1
+            tag_names = list_group_tags(connection, group_id)
+        fmt = options.output_format or self.runtime.output_format
+        if options.output_format:
+            dump_data({"group": group_name, "tags": tag_names}, fmt)
+        elif tag_names:
+            print(f"Group '{group_name}' tags: {', '.join(tag_names)}")
+        else:
+            print(f"Group '{group_name}' has no tags.")
         return 0
 
     def addhost(self, raw_args: Sequence[str]) -> int:
@@ -946,3 +1036,50 @@ def query_group_vars(connection: Connection, names: tuple[str, ...]) -> dict[str
         ).all()
         data[str(row.name)] = {str(var.name): str(var.value) for var in variables}
     return data
+
+
+def add_group_tags(connection: Connection, group_id: int, tag_names: Sequence[str]) -> list[str]:
+    """Add tags to a group and return changed tag names."""
+    changed: list[str] = []
+    for tag_name in tag_names:
+        tag_id = find_or_create_tag(connection, tag_name)
+        exists = connection.execute(
+            select(groups_tags.c.id).where(
+                groups_tags.c.group_id == group_id, groups_tags.c.tag_id == tag_id
+            )
+        ).scalar_one_or_none()
+        if exists is None:
+            connection.execute(groups_tags.insert().values(group_id=group_id, tag_id=tag_id))
+            changed.append(tag_name)
+    return changed
+
+
+def remove_group_tags(connection: Connection, group_id: int, tag_names: Sequence[str]) -> list[str]:
+    """Remove tags from a group and return changed tag names."""
+    changed: list[str] = []
+    for tag_name in tag_names:
+        tag_id = connection.execute(
+            select(tags.c.id).where(tags.c.name == tag_name)
+        ).scalar_one_or_none()
+        if tag_id is None:
+            continue
+        result = connection.execute(
+            delete(groups_tags).where(
+                groups_tags.c.group_id == group_id, groups_tags.c.tag_id == int(tag_id)
+            )
+        )
+        if result.rowcount:
+            changed.append(tag_name)
+    return changed
+
+
+def list_group_tags(connection: Connection, group_id: int) -> list[str]:
+    """List group tag names sorted by name."""
+    return list(
+        connection.execute(
+            select(tags.c.name)
+            .select_from(groups_tags.join(tags, groups_tags.c.tag_id == tags.c.id))
+            .where(groups_tags.c.group_id == group_id)
+            .order_by(tags.c.name)
+        ).scalars()
+    )

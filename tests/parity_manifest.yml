@@ -428,7 +428,7 @@ cases:
       json: {os: fedora}
 
   - id: host-tags-normalize-dedupe
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/tags_spec.rb:27
     description: host tag casing is normalized and duplicate values are deduped
     args: [host, listtags, app01]
@@ -442,7 +442,7 @@ cases:
       stderr: ""
 
   - id: group-tags-json
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/tags_spec.rb:52
     description: group listtags supports JSON output
     args: [group, listtags, web, --format, json]

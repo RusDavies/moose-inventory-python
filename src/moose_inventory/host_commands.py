@@ -12,7 +12,7 @@ import yaml
 from sqlalchemy import Connection, delete, select
 
 from moose_inventory.config import RuntimeOptions
-from moose_inventory.db import Database, groups, groups_hosts, hosts, hostvars
+from moose_inventory.db import Database, groups, groups_hosts, hosts, hosts_tags, hostvars, tags
 
 AUTOMATIC_GROUP = "ungrouped"
 
@@ -25,6 +25,7 @@ class HostCommandOptions:
     groups: tuple[str, ...] = ()
     dry_run: bool = False
     yes: bool = False
+    output_format: str | None = None
 
 
 class HostCommandError(RuntimeError):
@@ -65,6 +66,12 @@ class HostCommands:
                 return self.rmvar(args[1:])
             if action in {"listvar", "listvars"}:
                 return self.listvars(args[1:])
+            if action == "addtag":
+                return self.addtag(args[1:])
+            if action == "rmtag":
+                return self.rmtag(args[1:])
+            if action == "listtags":
+                return self.listtags(args[1:])
         except HostCommandError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
@@ -384,6 +391,78 @@ class HostCommands:
         print("Succeeded.")
         return 0
 
+    def addtag(self, raw_args: Sequence[str]) -> int:
+        """Add metadata tags to a host."""
+        options = parse_tag_options(raw_args, destructive=False)
+        if len(options.names) < 2:
+            print(
+                f"ERROR: Wrong number of arguments, {len(options.names)} for 2 or more.",
+                file=sys.stderr,
+            )
+            return 1
+        host_name = options.names[0].lower()
+        tag_names = normalize_tags(options.names[1:])
+        with self.database.engine.begin() as connection:
+            host_id = find_host_id(connection, host_name)
+            if host_id is None:
+                print(f"ERROR: The host '{host_name}' does not exist.", file=sys.stderr)
+                return 1
+            changed = add_host_tags(connection, host_id, tag_names)
+        print(f"Added host tag(s) to '{host_name}': {', '.join(changed)}.")
+        return 0
+
+    def rmtag(self, raw_args: Sequence[str]) -> int:
+        """Remove metadata tags from a host."""
+        options = parse_tag_options(raw_args, destructive=True)
+        if len(options.names) < 2:
+            print(
+                f"ERROR: Wrong number of arguments, {len(options.names)} for 2 or more.",
+                file=sys.stderr,
+            )
+            return 1
+        host_name = options.names[0].lower()
+        tag_names = normalize_tags(options.names[1:])
+        if not options.yes:
+            print(
+                f"ERROR: host rmtag {host_name} {','.join(tag_names)} is destructive. "
+                "Re-run with --yes to confirm.",
+                file=sys.stderr,
+            )
+            return 1
+        with self.database.engine.begin() as connection:
+            host_id = find_host_id(connection, host_name)
+            if host_id is None:
+                print(f"ERROR: The host '{host_name}' does not exist.", file=sys.stderr)
+                return 1
+            changed = remove_host_tags(connection, host_id, tag_names)
+        print(f"Removed host tag(s) from '{host_name}': {', '.join(changed)}.")
+        return 0
+
+    def listtags(self, raw_args: Sequence[str]) -> int:
+        """List metadata tags for a host."""
+        options = parse_tag_options(raw_args, destructive=False, allow_format=True)
+        if len(options.names) != 1:
+            print(
+                f"ERROR: Wrong number of arguments, {len(options.names)} for 1.",
+                file=sys.stderr,
+            )
+            return 1
+        host_name = options.names[0].lower()
+        with self.database.connect() as connection:
+            host_id = find_host_id(connection, host_name)
+            if host_id is None:
+                print(f"ERROR: The host '{host_name}' does not exist.", file=sys.stderr)
+                return 1
+            tag_names = list_host_tags(connection, host_id)
+        fmt = options.output_format or self.runtime.output_format
+        if options.output_format:
+            dump_data({"host": host_name, "tags": tag_names}, fmt)
+        elif tag_names:
+            print(f"Host '{host_name}' tags: {', '.join(tag_names)}")
+        else:
+            print(f"Host '{host_name}' has no tags.")
+        return 0
+
     def rmgroup(self, raw_args: Sequence[str]) -> int:
         """Dissociate a host from one or more groups."""
         options = parse_relation_options(raw_args, destructive=True)
@@ -529,6 +608,29 @@ def parse_relation_options(raw_args: Sequence[str], *, destructive: bool) -> Hos
             names.append(arg)
         index += 1
     return HostCommandOptions(tuple(names), dry_run=dry_run, yes=yes)
+
+
+def parse_tag_options(
+    raw_args: Sequence[str], *, destructive: bool, allow_format: bool = False
+) -> HostCommandOptions:
+    """Parse host tag command args."""
+    names: list[str] = []
+    yes = False
+    output_format: str | None = None
+    index = 0
+    while index < len(raw_args):
+        arg = raw_args[index]
+        if destructive and arg == "--yes":
+            yes = True
+        elif allow_format and arg == "--format":
+            if index + 1 >= len(raw_args):
+                raise HostCommandError("Expected a value after --format")
+            output_format = raw_args[index + 1]
+            index += 1
+        else:
+            names.append(arg)
+        index += 1
+    return HostCommandOptions(tuple(names), yes=yes, output_format=output_format)
 
 
 def parse_host_list_options(raw_args: Sequence[str]) -> dict[str, tuple[str, ...] | dict[str, str]]:
@@ -693,7 +795,10 @@ def host_payload(connection: Connection, host_id: int) -> dict[str, Any]:
         .where(hostvars.c.host_id == host_id)
         .order_by(hostvars.c.name)
     ).all()
+    tag_names = list_host_tags(connection, host_id)
     payload: dict[str, Any] = {"groups": list(group_names)}
+    if tag_names:
+        payload["tags"] = tag_names
     if variables:
         payload["hostvars"] = {str(row.name): row.value for row in variables}
     return payload
@@ -761,12 +866,81 @@ def query_host_vars(connection: Connection, names: tuple[str, ...]) -> dict[str,
     return data
 
 
+def normalize_tags(values: Sequence[str]) -> tuple[str, ...]:
+    """Normalize and dedupe tag names using Ruby-compatible rules."""
+    normalized: list[str] = []
+    for value in values:
+        tag = value.strip().lower()
+        if tag and tag not in normalized:
+            normalized.append(tag)
+    return tuple(normalized)
+
+
+def find_or_create_tag(connection: Connection, name: str) -> int:
+    """Find or create a tag and return its id."""
+    tag_id = connection.execute(select(tags.c.id).where(tags.c.name == name)).scalar_one_or_none()
+    if tag_id is not None:
+        return int(tag_id)
+    result = connection.execute(tags.insert().values(name=name))
+    return int(cast(Sequence[Any], result.inserted_primary_key)[0])
+
+
+def add_host_tags(connection: Connection, host_id: int, tag_names: Sequence[str]) -> list[str]:
+    """Add tags to a host and return changed tag names."""
+    changed: list[str] = []
+    for tag_name in tag_names:
+        tag_id = find_or_create_tag(connection, tag_name)
+        exists = connection.execute(
+            select(hosts_tags.c.id).where(
+                hosts_tags.c.host_id == host_id, hosts_tags.c.tag_id == tag_id
+            )
+        ).scalar_one_or_none()
+        if exists is None:
+            connection.execute(hosts_tags.insert().values(host_id=host_id, tag_id=tag_id))
+            changed.append(tag_name)
+    return changed
+
+
+def remove_host_tags(connection: Connection, host_id: int, tag_names: Sequence[str]) -> list[str]:
+    """Remove tags from a host and return changed tag names."""
+    changed: list[str] = []
+    for tag_name in tag_names:
+        tag_id = connection.execute(
+            select(tags.c.id).where(tags.c.name == tag_name)
+        ).scalar_one_or_none()
+        if tag_id is None:
+            continue
+        result = connection.execute(
+            delete(hosts_tags).where(
+                hosts_tags.c.host_id == host_id, hosts_tags.c.tag_id == int(tag_id)
+            )
+        )
+        if result.rowcount:
+            changed.append(tag_name)
+    return changed
+
+
+def list_host_tags(connection: Connection, host_id: int) -> list[str]:
+    """List host tag names sorted by name."""
+    return list(
+        connection.execute(
+            select(tags.c.name)
+            .select_from(hosts_tags.join(tags, hosts_tags.c.tag_id == tags.c.id))
+            .where(hosts_tags.c.host_id == host_id)
+            .order_by(tags.c.name)
+        ).scalars()
+    )
+
+
 def host_matches_filters(
     host_data: dict[str, Any], filters: Mapping[str, tuple[str, ...] | dict[str, str]]
 ) -> bool:
     """Return whether host data matches list filters."""
     groups_filter = set(filters.get("groups", ()))
     if groups_filter and not groups_filter.issubset(set(host_data.get("groups", []))):
+        return False
+    tags_filter = set(filters.get("tags", ()))
+    if tags_filter and not tags_filter.issubset(set(host_data.get("tags", []))):
         return False
     variables_filter = filters.get("variables", {})
     if isinstance(variables_filter, Mapping):

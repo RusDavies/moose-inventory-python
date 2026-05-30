@@ -159,6 +159,30 @@ def test_variable_command_flows_match_ruby(
         assert python_result == ruby_result
 
 
+@pytest.mark.parametrize(
+    "flow",
+    [
+        [
+            ("host", "add", "app01"),
+            ("host", "addtag", "app01", "Prod", "PROD", "owner-platform"),
+            ("host", "listtags", "app01"),
+            ("host", "rmtag", "app01", "PROD", "--yes"),
+            ("host", "listtags", "app01"),
+        ],
+        [
+            ("group", "add", "web"),
+            ("group", "addtag", "web", "frontend", "owner-platform"),
+            ("group", "listtags", "web", "--format", "json"),
+        ],
+    ],
+)
+def test_tag_command_flows_match_ruby(tmp_path: Path, flow: list[tuple[str, ...]]) -> None:
+    run = make_compatibility_run(tmp_path)
+    for args in flow:
+        ruby_result, python_result = run.compare(args)
+        assert python_result == ruby_result
+
+
 def test_database_backup_output_and_artifact_match_ruby(tmp_path: Path) -> None:
     run = make_compatibility_run(tmp_path)
 
