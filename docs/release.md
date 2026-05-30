@@ -60,8 +60,9 @@ Before first public release:
 
 1. Confirm `pyproject.toml` and `src/moose_inventory/version.py` carry the intended release version.
 2. Update docs/examples if the package name or extras change.
-3. Run the full gate.
-4. Tag the release after the final verification commit.
+3. Regenerate `requirements-release.txt` with `pip-compile --generate-hashes --no-emit-index-url --output-file=requirements-release.txt --strip-extras pyproject.toml` when runtime dependencies change.
+4. Run the full gate.
+5. Tag the release after the final verification commit.
 
 ## Vulnerability intake and security patches
 
@@ -84,4 +85,5 @@ Keep release evidence in `docs/release-evidence/` or equivalent release notes:
 - Ruby/Python parity status.
 - Package filenames and SHA-256 hashes.
 - Backend smoke evidence, including any skipped real-service checks.
+- Dependency/security scanner output, including `pip-audit`, OSV Scanner against `requirements-release.txt`, and Gitleaks.
 - Known limitations or compatibility exceptions.

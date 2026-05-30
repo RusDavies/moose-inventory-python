@@ -52,6 +52,19 @@ jobs:
       - name: Audit Python dependencies
         run: pip-audit . --progress-spinner=off
 
+      - name: Install OSV Scanner
+        env:
+          OSV_SCANNER_VERSION: 2.3.8
+          OSV_SCANNER_SHA256: bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc
+        run: |
+          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" -o /tmp/osv-scanner
+          echo "${OSV_SCANNER_SHA256}  /tmp/osv-scanner" | sha256sum -c -
+          install /tmp/osv-scanner "$HOME/.local/bin/osv-scanner"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Audit release lockfile with OSV Scanner
+        run: osv-scanner scan source --recursive --no-ignore .
+
       - name: Install Gitleaks
         env:
           GITLEAKS_VERSION: 8.30.1
