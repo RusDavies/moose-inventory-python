@@ -112,7 +112,7 @@ cases:
       stderr: "ERROR: Wrong number of arguments, 0 for 1 or more.\n"
 
   - id: host-add-basic
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/host_add_spec.rb:35
     description: adds host and automatic ungrouped association
     args: [host, add, test-host-add]
@@ -128,7 +128,7 @@ cases:
       stderr: ""
 
   - id: host-add-dry-run
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/host_add_spec.rb:64
     description: host add dry-run renders plan text without writing
     args: [host, add, dry-run-host, --dry-run]
@@ -172,7 +172,7 @@ cases:
       stderr: "ERROR: --plan-format requires --dry-run.\n"
 
   - id: host-list-empty
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/host_list_spec.rb:26
     description: host list returns empty YAML mapping with no hosts
     args: [host, list]
@@ -206,7 +206,7 @@ cases:
           hostvars: {os: fedora}
 
   - id: host-get-missing
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/host_get_spec.rb:37
     description: host get missing host returns empty YAML mapping
     args: [host, get, missing]
@@ -232,7 +232,7 @@ cases:
         - "malformed"
 
   - id: host-rm-requires-yes-or-dry-run
-    status: pending_python_port
+    status: active
     source: spec/lib/moose_inventory/cli/host_rm_spec.rb:60
     description: host rm without --yes or --dry-run aborts before deleting
     args: [host, rm, web01]
