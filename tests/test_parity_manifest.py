@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, cast
 
@@ -10,7 +11,9 @@ from compat_harness import CliResult, make_compatibility_run, ruby_available
 
 MANIFEST_PATH = Path(__file__).with_name("parity_manifest.yml")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RUBY_PROJECT_ROOT = PROJECT_ROOT.parent / "moose-inventory"
+RUBY_PROJECT_ROOT = Path(
+    os.environ.get("MOOSE_INVENTORY_RUBY_ROOT", PROJECT_ROOT.parent / "moose-inventory")
+)
 VALID_STATUSES = {"active", "pending_python_port"}
 VALID_COMPARE_MODES = {"exact", "pattern", "yaml_structural", "json_structural"}
 
