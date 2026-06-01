@@ -280,7 +280,8 @@ def serialize_data(data: object, output_format: str) -> str:
     """Serialize data using Ruby-compatible format aliases."""
     fmt = output_format.lower()
     if fmt in {"yaml", "y"}:
-        return cast(str, yaml.safe_dump(data, sort_keys=False))
+        dumped: str = yaml.safe_dump(data, sort_keys=False)
+        return dumped
     if fmt in {"json", "j"}:
         return json.dumps(data, separators=(",", ":"))
     if fmt in {"prettyjson", "pjson", "p"}:
