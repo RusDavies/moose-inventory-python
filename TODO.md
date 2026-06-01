@@ -4,7 +4,8 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 
 ## Open
 
-_None at the moment._
+- [ ] Update GitHub Actions dependencies or runner settings for the Node.js 20 deprecation warning before GitHub forces Node.js 24.
+- [ ] Make version tests derive the expected version from package metadata instead of hard-coding the release number, so patch bumps do not require test literal edits.
 
 ## Done
 
