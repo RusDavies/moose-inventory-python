@@ -9,14 +9,14 @@ from moose_inventory.cli import main
 
 
 def test_version_exports_package_version() -> None:
-    assert __version__ == "2.1.0"
+    assert __version__ == "2.1.1"
 
 
 def test_version_command_prints_ruby_style_version(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["version"]) == 0
 
     captured = capsys.readouterr()
-    assert captured.out == "Version 2.1.0\n"
+    assert captured.out == "Version 2.1.1\n"
     assert captured.err == ""
 
 
