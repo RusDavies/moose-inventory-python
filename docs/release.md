@@ -42,11 +42,24 @@ Record the exact git commit, package version, filenames, and SHA-256 hashes in r
 
 ## PyPI publication
 
-Preferred publication path is PyPI trusted publishing from CI once configured. Until then, use a scoped PyPI API token stored outside the repository:
+Publication uses PyPI Trusted Publishing from GitHub Actions. Do not use local `twine upload` for normal releases, and do not store PyPI tokens in the repository.
 
-```bash
-python -m twine upload dist/*
-```
+The workflow is `.github/workflows/publish.yml`. It is manually triggered with:
+
+- `target`: `testpypi` or `pypi`
+- `version`: the expected package version, which must match both `pyproject.toml` and `src/moose_inventory/version.py`
+
+The workflow rebuilds the distributions, runs the release-readiness gate, dependency/security scanners, `twine check`, records artifact hashes in the job log, then publishes using OIDC via `pypa/gh-action-pypi-publish`.
+
+Trusted publisher setup required on PyPI/TestPyPI:
+
+- Owner/account: `RusDavies`
+- Repository: `RusDavies/moose-inventory-python`
+- Workflow: `publish.yml`
+- Environment: `testpypi` for TestPyPI and `pypi` for PyPI
+- Project/distribution name: `moose-inventory`
+
+For the first release, create a pending trusted publisher on PyPI/TestPyPI before running the workflow. Keep the GitHub `pypi` environment protected with required reviewer approval so real publication remains a deliberate human action.
 
 Never commit PyPI tokens, `.pypirc`, generated credentials, database passwords, or local config files.
 
@@ -62,7 +75,10 @@ Before first public release:
 2. Update docs/examples if the package name or extras change.
 3. Regenerate `requirements-release.txt` with `pip-compile --generate-hashes --no-emit-index-url --output-file=requirements-release.txt --strip-extras pyproject.toml` when runtime dependencies change.
 4. Run the full gate.
-5. Tag the release after the final verification commit.
+5. Ensure PyPI/TestPyPI trusted publishers and GitHub environments exist.
+6. Trigger the publish workflow for `testpypi` and verify installation/import from TestPyPI.
+7. Trigger the publish workflow for `pypi` after human approval.
+8. Tag the release after the final verification/publication commit when appropriate.
 
 ## Vulnerability intake and security patches
 

@@ -1,0 +1,151 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Package index target"
+        required: true
+        default: "testpypi"
+        type: choice
+        options:
+          - testpypi
+          - pypi
+      version:
+        description: "Expected package version, for example 2.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and verify distributions
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check out Ruby reference repository
+        uses: actions/checkout@v4
+        with:
+          repository: RusDavies/moose-inventory
+          path: ruby-reference
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install package with development dependencies
+        run: python -m pip install -e '.[dev,postgresql,mysql]'
+
+      - name: Verify requested version matches package metadata
+        id: version
+        shell: bash
+        run: |
+          pyproject_version="$(python -c "import tomllib; from pathlib import Path; print(tomllib.loads(Path('pyproject.toml').read_text())['project']['version'])")"
+          package_version="$(python -c "from moose_inventory.version import __version__; print(__version__)")"
+          echo "version=${pyproject_version}" >> "$GITHUB_OUTPUT"
+          if [ "$pyproject_version" != "${{ inputs.version }}" ]; then
+            echo "Requested version ${{ inputs.version }} does not match pyproject.toml version ${pyproject_version}" >&2
+            exit 1
+          fi
+          if [ "$package_version" != "${{ inputs.version }}" ]; then
+            echo "Requested version ${{ inputs.version }} does not match package version ${package_version}" >&2
+            exit 1
+          fi
+
+      - name: Run release-readiness gate
+        env:
+          MOOSE_INVENTORY_RUBY_ROOT: ${{ github.workspace }}/ruby-reference
+        run: ./scripts/check.sh
+
+      - name: Audit Python dependencies
+        run: |
+          python -m pip install pip-audit
+          pip-audit . --progress-spinner=off
+
+      - name: Install OSV Scanner
+        env:
+          OSV_SCANNER_VERSION: 2.3.8
+          OSV_SCANNER_SHA256: bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc
+        run: |
+          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" -o /tmp/osv-scanner
+          echo "${OSV_SCANNER_SHA256}  /tmp/osv-scanner" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin"
+          install /tmp/osv-scanner "$HOME/.local/bin/osv-scanner"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Audit release lockfile with OSV Scanner
+        run: osv-scanner scan source --recursive --no-ignore .
+
+      - name: Install Gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
+          tar -C /tmp -xzf /tmp/gitleaks.tar.gz gitleaks
+          install /tmp/gitleaks "$HOME/.local/bin/gitleaks"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Scan git history for secrets
+        run: gitleaks detect --source . --redact --verbose
+
+      - name: Rebuild distributions from clean output directory
+        run: |
+          rm -rf dist build *.egg-info
+          python -m build
+          python -m twine check dist/*
+          sha256sum dist/*
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/*
+          if-no-files-found: error
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    if: ${{ inputs.target == 'testpypi' }}
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build
+    if: ${{ inputs.target == 'pypi' }}
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
