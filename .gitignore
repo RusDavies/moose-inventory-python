@@ -20,4 +20,9 @@ venv/
 # Local/runtime files
 tmp/
 *.db
+
+# Runtime SQLite inventory databases, including backup/WAL/SHM variants.
+[iI][nN][vV][eE][nN][tT][oO][rR][yY].[dD][bB]
+[iI][nN][vV][eE][nN][tT][oO][rR][yY].[dD][bB]-*
+[iI][nN][vV][eE][nN][tT][oO][rR][yY].[dD][bB].*
 /.openclaw-security-audit/
