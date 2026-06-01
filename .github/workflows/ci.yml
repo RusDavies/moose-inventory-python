@@ -17,6 +17,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Check out Ruby reference repository
+        uses: actions/checkout@v4
+        with:
+          repository: RusDavies/moose-inventory
+          path: ruby-reference
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -24,9 +30,11 @@ jobs:
           cache: pip
 
       - name: Install package with development dependencies
-        run: python -m pip install -e '.[dev]'
+        run: python -m pip install -e '.[dev,postgresql,mysql]'
 
       - name: Run local release-readiness gate
+        env:
+          MOOSE_INVENTORY_RUBY_ROOT: ${{ github.workspace }}/ruby-reference
         run: ./scripts/check.sh
 
   security:
@@ -59,6 +67,7 @@ jobs:
         run: |
           curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" -o /tmp/osv-scanner
           echo "${OSV_SCANNER_SHA256}  /tmp/osv-scanner" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin"
           install /tmp/osv-scanner "$HOME/.local/bin/osv-scanner"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
