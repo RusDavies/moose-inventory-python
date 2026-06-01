@@ -4,9 +4,11 @@ Backlog for the Python CLI replacement for the Ruby `moose-inventory` project.
 
 ## Open
 
-- [ ] Configure PyPI/TestPyPI pending trusted publishers and run the first trusted-publishing release.
+_None at the moment._
 
 ## Done
+
+- [x] Configure PyPI/TestPyPI pending trusted publishers and run the first trusted-publishing release.
 
 - [x] Add stronger OSV/lockfile release evidence if public release policy requires lockfile-based scanning.
 - [x] Choose the first public Python package version and update package metadata before release.
