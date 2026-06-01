@@ -3,20 +3,26 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import tomllib
 
 from moose_inventory import __version__
 from moose_inventory.cli import main
 
 
+def package_metadata_version() -> str:
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    return tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["version"]
+
+
 def test_version_exports_package_version() -> None:
-    assert __version__ == "2.1.1"
+    assert __version__ == package_metadata_version()
 
 
 def test_version_command_prints_ruby_style_version(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["version"]) == 0
 
     captured = capsys.readouterr()
-    assert captured.out == "Version 2.1.1\n"
+    assert captured.out == f"Version {__version__}\n"
     assert captured.err == ""
 
 
