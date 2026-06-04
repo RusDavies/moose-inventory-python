@@ -105,7 +105,9 @@ moose-inventory --config ./config.yml host add web01 --groups web
 moose-inventory --config ./config.yml host addvar web01 os=fedora
 moose-inventory --config ./config.yml group addvar web role=frontend
 moose-inventory --config ./config.yml host list
+moose-inventory --config ./config.yml host get web01
 moose-inventory --config ./config.yml group list
+moose-inventory --config ./config.yml group get web
 ```
 
 Ask the command for help when you forget the shape of a subcommand, as all civilized people do constantly:
@@ -162,6 +164,7 @@ Hosts can belong to one or more groups. New hosts start in the automatic `ungrou
 ```bash
 moose-inventory --config ./config.yml host add web01
 moose-inventory --config ./config.yml group add web
+moose-inventory --config ./config.yml group add api --hosts api01 api02
 moose-inventory --config ./config.yml host addgroup web01 web
 moose-inventory --config ./config.yml group addhost web web02
 moose-inventory --config ./config.yml host rmgroup web01 web --yes
@@ -193,6 +196,7 @@ moose-inventory --config ./config.yml group addvar web role=frontend
 moose-inventory --config ./config.yml host listvars web01
 moose-inventory --config ./config.yml group listvars web
 moose-inventory --config ./config.yml host rmvar web01 owner --yes
+moose-inventory --config ./config.yml group rmvar web role --yes
 ```
 
 Metadata tags are separate from Ansible variables. Use them for operational labels such as environment, owner, lifecycle, location, role, or criticality when you want searchable inventory metadata without exposing it as host/group vars.
@@ -204,6 +208,7 @@ moose-inventory --config ./config.yml host rmtag web01 critical --yes
 
 moose-inventory --config ./config.yml group addtag web frontend public-edge
 moose-inventory --config ./config.yml group listtags web --format json
+moose-inventory --config ./config.yml group rmtag web public-edge --yes
 ```
 
 Tag names are normalized to lowercase and deduplicated.
