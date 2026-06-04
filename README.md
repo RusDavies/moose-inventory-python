@@ -155,6 +155,86 @@ moose-inventory --config ./config.yml host rm old-web01 --dry-run
 moose-inventory --config ./config.yml host rm old-web01 --yes
 ```
 
+## Host and group relationships
+
+Hosts can belong to one or more groups. New hosts start in the automatic `ungrouped` group unless you place them elsewhere. When a host gains a real group association, `ungrouped` is removed automatically. When its last real group association is removed, `ungrouped` is added back.
+
+```bash
+moose-inventory --config ./config.yml host add web01
+moose-inventory --config ./config.yml group add web
+moose-inventory --config ./config.yml host addgroup web01 web
+moose-inventory --config ./config.yml group addhost web web02
+moose-inventory --config ./config.yml host rmgroup web01 web --yes
+moose-inventory --config ./config.yml group rmhost web web02 --yes
+```
+
+Groups can also have child groups. This lets you model nested inventory structure without flattening everything into a sad pile of names.
+
+```bash
+moose-inventory --config ./config.yml group add region-east web
+moose-inventory --config ./config.yml group addchild region-east web
+moose-inventory --config ./config.yml group rmchild region-east web --yes
+```
+
+Use `--recursive` when deleting a group and you intentionally want orphaned child groups removed too. Use `--delete-orphans` with `group rmchild` when removing a parent-child relationship should also delete child subtrees that become orphaned by that removal.
+
+```bash
+moose-inventory --config ./config.yml group rm old-parent --recursive --yes
+moose-inventory --config ./config.yml group rmchild parent child --delete-orphans --yes
+```
+
+## Variables, tags, and filtered lists
+
+Host and group variables are exposed to inventory consumers. Use them for data Ansible should see:
+
+```bash
+moose-inventory --config ./config.yml host addvar web01 os=fedora owner=platform
+moose-inventory --config ./config.yml group addvar web role=frontend
+moose-inventory --config ./config.yml host listvars web01
+moose-inventory --config ./config.yml group listvars web
+moose-inventory --config ./config.yml host rmvar web01 owner --yes
+```
+
+Metadata tags are separate from Ansible variables. Use them for operational labels such as environment, owner, lifecycle, location, role, or criticality when you want searchable inventory metadata without exposing it as host/group vars.
+
+```bash
+moose-inventory --config ./config.yml host addtag web01 prod critical owner-platform
+moose-inventory --config ./config.yml host listtags web01
+moose-inventory --config ./config.yml host rmtag web01 critical --yes
+
+moose-inventory --config ./config.yml group addtag web frontend public-edge
+moose-inventory --config ./config.yml group listtags web --format json
+```
+
+Tag names are normalized to lowercase and deduplicated.
+
+Host listings can be filtered by group, tag, and variable. Multiple filters are treated as an AND: the host must match all requested groups, tags, and variable key/value pairs.
+
+```bash
+moose-inventory --config ./config.yml host list --group web --tag prod --var os=fedora --format yaml
+```
+
+## Audit log and database lifecycle
+
+Successful mutating commands are recorded in a small append-only audit log. Dry runs are not recorded, because they did not change anything. Shocking restraint, really.
+
+```bash
+moose-inventory --config ./config.yml audit list
+moose-inventory --config ./config.yml audit list --limit 100
+moose-inventory --config ./config.yml audit list --format pjson
+```
+
+Database lifecycle commands live under `database`; `db` is an alias.
+
+```bash
+moose-inventory --config ./config.yml db status
+moose-inventory --config ./config.yml db doctor
+moose-inventory --config ./config.yml db migrate
+moose-inventory --config ./config.yml db backup ./backup/moose-inventory.sqlite3
+```
+
+`db migrate` creates missing schema tables and records the current schema version. `db backup` is supported for SQLite databases only; for MySQL/MariaDB and PostgreSQL, use native database backup tools such as `mysqldump`, `mariadb-dump`, `pg_dump`, or managed-service snapshots.
+
 ## Import and export snapshots
 
 Export the full inventory as a portable YAML or JSON snapshot:
@@ -217,6 +297,27 @@ You can also call the underlying Ansible-oriented commands explicitly:
 moose-inventory --config ./config.yml --ansible group list
 moose-inventory --config ./config.yml --ansible host listvars web01
 ```
+
+To persist data from an Ansible run back into the inventory, call `moose-inventory` from a local task or from your inventory shim. For example:
+
+```yaml
+- set_fact:
+    discovered_role: frontend
+
+- name: Record discovered host role in Moose Inventory
+  delegate_to: localhost
+  ansible.builtin.command:
+    argv:
+      - moose-inventory
+      - --config
+      - ./config.yml
+      - host
+      - addvar
+      - "{{ inventory_hostname }}"
+      - "role={{ discovered_role }}"
+```
+
+If you wrap `moose-inventory` in a shell shim, pass Ansible's arguments through as quoted `"$@"` so names and values containing spaces survive the trip through the shell-shaped cheese grater.
 
 ## Read-only console
 
