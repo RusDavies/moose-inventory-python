@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if GitHub Actions workflow uses entries are not immutably pinned."""
+"""Fail if GitHub Actions workflow dependencies are not immutably pinned/verified."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from pathlib import Path
 USES_RE = re.compile(r"^(?P<prefix>\s*uses:\s*)(?P<value>[^#\s]+)")
 FULL_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 DOCKER_DIGEST_RE = re.compile(r"^docker://.+@sha256:[0-9a-fA-F]{64}$")
+RELEASE_DOWNLOAD_RE = re.compile(r"curl\b.*github\.com/.+/releases/download/.+\s+-o\s+")
+SHA256_VERIFY_RE = re.compile(r"sha256sum\s+-c\s+-")
 
 
 def workflow_files(root: Path) -> list[Path]:
@@ -22,24 +24,41 @@ def workflow_files(root: Path) -> list[Path]:
 def violations(root: Path) -> list[str]:
     problems: list[str] = []
     for path in workflow_files(root):
-        for lineno, line in enumerate(path.read_text().splitlines(), start=1):
+        lines = path.read_text().splitlines()
+        for lineno, line in enumerate(lines, start=1):
             match = USES_RE.match(line)
-            if not match:
-                continue
-            value = match.group("value").strip('"\'')
-            if value.startswith("./") or value.startswith(".\\"):
-                continue
-            if value.startswith("docker://"):
-                if not DOCKER_DIGEST_RE.match(value):
-                    problems.append(f"{path}:{lineno}: docker action is not pinned by sha256 digest: {value}")
-                continue
-            if "@" not in value:
-                problems.append(f"{path}:{lineno}: remote action missing @<full-sha>: {value}")
-                continue
-            _action, ref = value.rsplit("@", 1)
-            if not FULL_SHA_RE.fullmatch(ref):
-                problems.append(f"{path}:{lineno}: remote action is not pinned to a full 40-character SHA: {value}")
+            if match:
+                value = match.group("value").strip('"\'')
+                if value.startswith("./") or value.startswith(".\\"):
+                    continue
+                if value.startswith("docker://"):
+                    if not DOCKER_DIGEST_RE.match(value):
+                        problems.append(
+                            f"{path}:{lineno}: docker action is not pinned by sha256 "
+                            f"digest: {value}"
+                        )
+                    continue
+                if "@" not in value:
+                    problems.append(f"{path}:{lineno}: remote action missing @<full-sha>: {value}")
+                    continue
+                _action, ref = value.rsplit("@", 1)
+                if not FULL_SHA_RE.fullmatch(ref):
+                    problems.append(
+                        f"{path}:{lineno}: remote action is not pinned to a full "
+                        f"40-character SHA: {value}"
+                    )
+            if RELEASE_DOWNLOAD_RE.search(line) and not verified_by_nearby_sha256(
+                lines, lineno - 1
+            ):
+                problems.append(
+                    f"{path}:{lineno}: GitHub release download is not verified with sha256sum -c -"
+                )
     return problems
+
+
+def verified_by_nearby_sha256(lines: list[str], index: int) -> bool:
+    """Return whether a release download is followed by a nearby SHA-256 check."""
+    return any(SHA256_VERIFY_RE.search(line) for line in lines[index + 1 : index + 4])
 
 
 def main() -> int:
