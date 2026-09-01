@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.25"]
+requires = ["hatchling>=1.25,<1.28"]
 build-backend = "hatchling.build"
 
 [project]
@@ -39,7 +39,7 @@ dev = [
   "pytest-cov>=5.0",
   "ruff>=0.8",
   "mypy>=1.13",
-  "twine>=5.0",
+  "twine>=6.2",
   "types-PyYAML>=6.0.12"
 ]
 
